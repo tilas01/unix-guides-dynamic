@@ -1149,11 +1149,25 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
     // Build output
     function buildOutput(cmdOnly) {
         let o = "";
-        // Hidden config (only in raw source, stripped from preview)
+        /* The answers, embedded so a saved guide or script can be loaded back in
+           and carry on where it left off. Stripped from the preview; present in
+           the raw source.
+
+           The shape has to differ between the two outputs, and this is not
+           cosmetic. `<!-- … -->` is a comment in markdown and a syntax error in
+           shell: an HTML comment at the top of the .sh meant the downloaded
+           install script did not parse at all — `bash -n` stopped on it before
+           reading a single command. The script therefore gets the `###` form
+           on one line, so the whole line is a shell comment, and it goes after
+           the shebang because a shebang only works on line 1.
+
+           `tryParseConfig()` already accepted both spellings; only the emitter
+           was missing one. */
         const configObj = getFormValues();
-        o += '<!-- CONFIG_START\n' + JSON.stringify(wrapConfig(configObj, 'dynamic-generator')) + '\nCONFIG_END -->\n\n';
+        const configJSON = JSON.stringify(wrapConfig(configObj, 'dynamic-generator'));
 
         if (!cmdOnly) {
+            o += '<!-- CONFIG_START\n' + configJSON + '\nCONFIG_END -->\n\n';
             o += `# Your Custom ${osLabel} Installation Guide\n\n`;
             /* Same banner, same wording and same position as the walkthrough's.
                A reader who reaches an unfinished guide through this front end
@@ -1177,7 +1191,9 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
             o += `> *Generated for your specific hardware. Review every command before running.*\n\n`;
             o += `## 1. Partitioning & Formatting (${part} + ${fs})\n\`\`\`bash\n`;
         } else {
-            o += `#!/bin/bash\n# Generated Script\n# WARNING: Review ALL commands!\nset -e\n`;
+            o += `#!/bin/bash\n`;
+            o += `### CONFIG_START ${configJSON} ### CONFIG_END\n`;
+            o += `# Generated Script\n# WARNING: Review ALL commands!\nset -e\n`;
             /* And in the script, because someone who skims the page and runs the
                file has not read the guide. A comment block rather than a prompt:
                the script is also read by people who pipe it somewhere. */
@@ -3775,8 +3791,16 @@ updateHistoryTooltip();
         // Look for embedded config comment block
         const m1 = text.match(/<!--\s*CONFIG_START\s*([\s\S]*?)\s*CONFIG_END\s*-->/);
         if (m1) { try { return unwrapConfig(JSON.parse(m1[1])); } catch(e) {} }
-        // Shell script config block
-        const m2 = text.match(/###\s*CONFIG_START\s*([\s\S]*?)\s*###\s*CONFIG_END/);
+        /* Shell script config block. One line, because the whole line has to be
+           a shell comment for the script to run.
+
+           Anchored to the end of that line rather than stopping at the first
+           terminator it meets. Free text reaches this — package names, a
+           timezone, an app's own configuration — and a value containing the
+           end marker would otherwise cut the JSON short, so the parse would
+           fail and the restore would quietly do nothing. Ending at the last
+           marker on the line is the reading that survives that. */
+        const m2 = text.match(/^###\s*CONFIG_START\s+([^\n]*?)\s+###\s*CONFIG_END\s*$/m);
         if (m2) { try { return unwrapConfig(JSON.parse(m2[1])); } catch(e) {} }
         return null;
     }

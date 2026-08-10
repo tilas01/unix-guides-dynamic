@@ -220,6 +220,15 @@ jobs:
         run: npm run osperms
         working-directory: tests
 
+      # The same leakage question aimed at the generator. os-permutations drives
+      # the walkthrough's emitter; this drives index.html itself, over HTTP with
+      # its scripts running, because the generator is DOM-bound and has no
+      # callable entry point. Without it the headline number described one of
+      # two front ends while being read as both.
+      - name: "Test: no foreign tooling in the generator"
+        run: npm run genos
+        working-directory: tests
+
       # Retired names must stay retired. anti-ducky's rename half-reverted once
       # and left a journalctl line naming a unit that never existed.
       - name: "Test: naming parity"
