@@ -176,10 +176,17 @@ console.log('\n' + '='.repeat(78));
 console.log('CROSS-GENERATOR PARITY');
 console.log('='.repeat(78));
 if (!generatorUsable) {
-  console.log('  Generator getFormValues() not reachable in jsdom — cannot drive its');
-  console.log('  form programmatically here. Its own output path is exercised by the');
-  console.log('  browser tests instead.');
-  notes.push('generator not driveable headlessly');
+  /* Not reachable *the way this file loads it* — it concatenates the website
+     scripts into one scope, and the generator is DOM-bound, so getFormValues()
+     never comes into existence. That is a limitation here and not a property of
+     the generator: served over HTTP with its scripts running, it drives fine,
+     and generator-os.mjs does exactly that. Saying "not driveable headlessly"
+     read as the latter for long enough that nothing measured the generator at
+     all. */
+  console.log('  Generator getFormValues() not reachable in this harness, which loads the');
+  console.log('  website scripts into one scope and cannot build a DOM for them. The');
+  console.log('  generator is driven for real by generator-os.mjs (npm run genos).');
+  notes.push('generator compared through generator-os.mjs, not here');
 } else {
   console.log('  Generator loaded, getFormValues() present.');
   const fv = W.getFormValues();
