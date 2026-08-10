@@ -101,7 +101,11 @@ jobs:
       # file that parses and produces the wrong thing, which is the layer these
       # catch: 578 permutations of the walkthrough asserted on content, every
       # generated script through `bash -n`, structural responsive checks, and
-      # html-validate on all nine pages.
+      # html-validate on every page.
+      #
+      # Each gate below gets its own step so a failure names itself in the job
+      # summary. The list must stay in step with `npm test` in tests/package.json
+      # — a gate that exists and is never run reports success it never earned.
       - name: Install test dependencies
         run: npm install --no-audit --no-fund
         working-directory: tests
@@ -187,6 +191,46 @@ jobs:
       # loaded and a page running nothing reported "no runtime errors".
       - name: "Test: page runtime"
         run: npm run runtime
+        working-directory: tests
+
+      # A documented CLI flag no crate handles is this repository's most
+      # persistent defect: ten of them shipped at once, and one meant the
+      # boot-time OTP prompt was never installed on any machine.
+      - name: "Test: documented tool flags exist"
+        run: npm run cliflags
+        working-directory: tests
+
+      # Every <select> option must be reachable and must mean something to the
+      # emitter. A control offering a value nothing reads is a phantom feature
+      # wearing a dropdown.
+      - name: "Test: select options are wired up"
+        run: npm run selects
+        working-directory: tests
+
+      # Fails if a system exists in os-meta.js that this gate does not cover, so
+      # adding a system cannot leave it untested while the gate still passes.
+      - name: "Test: per-system variants"
+        run: npm run osvariants
+        working-directory: tests
+
+      # The leakage measure: how often a guide prints another system's tooling
+      # under this system's name. It reports while a system is badged and fails
+      # the moment one is marked complete, so a badge cannot lift quietly.
+      - name: "Test: no foreign tooling per system"
+        run: npm run osperms
+        working-directory: tests
+
+      # Retired names must stay retired. anti-ducky's rename half-reverted once
+      # and left a journalctl line naming a unit that never existed.
+      - name: "Test: naming parity"
+        run: npm run names
+        working-directory: tests
+
+      # The security-tool support table in the website and the one in the
+      # installer are two copies of the same claim; this compares them in both
+      # directions and requires a reason for anything that is not a plain yes.
+      - name: "Test: per-system tool support"
+        run: npm run toolsupport
         working-directory: tests
 
       - name: "Test: HTML validity"
