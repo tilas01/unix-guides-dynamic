@@ -2709,6 +2709,18 @@ aur-guard --json ./PKGBUILD | jq         # for hooking into a helper</code></pre
 
     window.renderMarkdownInto(body, url, { headingPrefix: 'doc-' })
         .then(function (headings) {
+            /* Honour a fragment now that the headings it names exist.
+
+               This runs before the contents list, and outside its length
+               check. It used to sit inside that early return, so a document
+               with fewer than four headings — short enough that a contents
+               block would be noise — ignored the anchor it was opened with and
+               dropped the reader at the top. */
+            if (location.hash.length > 1) {
+                var target = document.getElementById(location.hash.slice(1));
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
             // Give the document its own contents list when it is long enough to
             // need one. Below four headings a contents block is just noise.
             if (!headings || headings.length < 4) return;
@@ -2721,12 +2733,6 @@ aur-guard --json ./PKGBUILD | jq         # for hooking into a helper</code></pre
                                    h.text.replace(/[<>&]/g, '') + '</a></li>';
                         }).join('') + '</ul>';
             body.insertBefore(toc, body.firstChild);
-
-            // Honour a fragment now that the headings it names exist.
-            if (location.hash.length > 1) {
-                var target = document.getElementById(location.hash.slice(1));
-                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
         })
         .catch(function (err) {
             failed(err && err.message === 'no-fetch'

@@ -587,28 +587,53 @@ systemctl enable dnsmasq
 ## Security Suite Commands
 
 
-### Installation (from generator)
+### Installation
+
+The release assets are named after the crate, with no platform suffix. They are
+built on x86_64 Linux only, so they will not run on a Raspberry Pi or a BSD —
+build from source there instead.
 
 ```bash
-# Download latest release
+# Download the latest release
 SUITE_VERSION=$(curl -s "https://api.github.com/repos/tilas01/unix-guides-dynamic/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
-curl -LO "https://github.com/tilas01/unix-guides-dynamic/releases/download/$SUITE_VERSION/arch-rusty-security-suite-linux-x86_64"
-curl -LO "https://github.com/tilas01/unix-guides-dynamic/releases/download/$SUITE_VERSION/arch-rusty-security-suite-linux-x86_64.sha256"
+BASE="https://github.com/tilas01/unix-guides-dynamic/releases/download/$SUITE_VERSION"
+curl -LO "$BASE/unix-security-suite"
+curl -LO "$BASE/unix-security-suite.sha256"
+curl -LO "$BASE/unix-security-suite.sig"
 
-# Verify integrity
-sha256sum -c arch-rusty-security-suite-linux-x86_64.sha256
+# Check the hash, then the signature. The hash proves the download is intact;
+# only the signature says who built it.
+sha256sum -c unix-security-suite.sha256
+curl -L "https://tilas01.github.io/unix-guides-dynamic/tilas01.asc" | gpg --import
+gpg --verify unix-security-suite.sig unix-security-suite
 
 # Install
-chmod +x arch-rusty-security-suite-linux-x86_64
-cp arch-rusty-security-suite-linux-x86_64 /usr/local/bin/arch-rusty-security-suite
+chmod +x unix-security-suite
+install -o root -g root -m 0755 unix-security-suite /usr/local/bin/unix-security-suite
 ```
 
 ### Suite Commands
 
+One binary, one subcommand per tool. Every subcommand also takes `--gui`, which
+opens that tool's own interface and falls back to the interactive CLI where no
+display server is reachable.
+
 | Command | Description |
 |---------|-------------|
+| `unix-security-suite list` | List the tools in this build and what each subcommand does |
+| `unix-security-suite otp` | TOTP/HOTP two-factor for boot, login and SSH |
+| `unix-security-suite ducky` | Anti-Ducky — block BadUSB keystroke injection |
+| `unix-security-suite aem --setup` | Record a baseline of the current boot chain |
+| `unix-security-suite aem --daemon` | Run the boot check once and report |
+| `unix-security-suite aem --fs-hash-check` | Deep filesystem hash verification |
+| `unix-security-suite watch --setup` | Initialise the Kernel Watcher watch list, then exit |
+| `unix-security-suite watch` | Watch the filesystem for infostealer and rootkit behaviour |
+| `unix-security-suite scarecrow` | Canary tokens and sandbox spoofing |
 
-```
+`aem` also takes `--main-kernel`, `--backup-kernel` and `--decoy-count` when you
+are managing decoy boot entries by hand. Run `unix-security-suite <tool> --help`
+for the current flags on any of them — that output is the authority, not this
+table.
 
 ---
 

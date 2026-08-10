@@ -92,6 +92,21 @@
         var at = path.indexOf('#');
         if (at !== -1) { hash = path.slice(at + 1); path = path.slice(0, at); }
 
+        /* Documents are linked as `wiki.html?page=<path>.md` so they render
+           inside the wiki rather than being served as raw markdown. The reader
+           should still be told where the thing is, not how it is fetched, so
+           the crumb is built from the document's own path. */
+        var q = path.indexOf('?page=');
+        if (q !== -1) {
+            var doc = decodeURIComponent(path.slice(q + 6));
+            // The handler resolves everything against docs/ except the
+            // agreements, which it serves from the site root.
+            path = doc.indexOf('user-agreements/') === 0 ? doc : 'docs/' + doc;
+            // The renderer prefixes every heading id, which is plumbing rather
+            // than part of the section's name.
+            hash = hash.replace(/^doc-/, '');
+        }
+
         var parts = path.split('/').filter(Boolean);
         var crumbs;
         if (parts.length === 1 && PAGE_NAMES[parts[0]]) {
