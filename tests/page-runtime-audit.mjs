@@ -27,7 +27,7 @@ const NO_NAV = new Set(['upload.html']);
 
 /* The number of destinations in shared-ui.js's NAV. Asserted rather than
    inferred, so removing one from the nav fails here instead of silently. */
-const NAV_COUNT = 8;
+const NAV_COUNT = 9;
 
 /* Genuine jsdom gaps. Deliberately narrow: it must not be possible for a
    script that failed to load to be filtered out as "environmental". */

@@ -172,8 +172,17 @@
         return results; // relevance: leave as scored
     }
 
+    /* Every element here is optional except the results container.
+       This search is not exclusive to the Index page — home.html offers the
+       same box so that somebody arriving with a question does not have to guess
+       which of the four routes holds the answer — and a page that wants search
+       without a browse-by-section list, or without a result counter, is a
+       reasonable thing to be. `sortWrap` was already guarded; the other three
+       were not, so the first keystroke on any page lacking `#site-contents`
+       threw and the search silently did nothing at all. */
     function render(results, words) {
         var host = el('search-results');
+        if (!host) return;
         var contents = el('site-contents');
         var count = el('result-count');
         var sortWrap = el('sort-wrap');
@@ -183,16 +192,16 @@
         lastWords = words;
 
         if (!results.length) {
-            contents.hidden = false;
+            if (contents) contents.hidden = false;
             host.hidden = true;
-            count.textContent = '';
+            if (count) count.textContent = '';
             if (sortWrap) sortWrap.hidden = true;
             return;
         }
-        contents.hidden = true;
+        if (contents) contents.hidden = true;
         host.hidden = false;
         if (sortWrap) sortWrap.hidden = false;
-        count.textContent = results.length + (results.length === 1 ? ' result' : ' results');
+        if (count) count.textContent = results.length + (results.length === 1 ? ' result' : ' results');
 
         var ordered = applySort(results);
         ordered.forEach(function (r, i) {

@@ -342,8 +342,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // three other guides are unfinished, and the default has to be the one that
   // works. Skipping is not a separate state — it means Arch, which is what the
   // rest of the site already assumes.
+  /* Where the reader goes once a system is chosen.
+
+     This used to be a third overlay, stacked behind the waiver and the chooser,
+     listing every destination on the site. The list was right and the container
+     was wrong: it appeared over whichever page happened to be underneath, so the
+     first thing a visitor saw was a modal covering a page they had never asked
+     for, and dismissing it left them somewhere arbitrary.
+
+     home.html is that same list as an actual page — with the search box, what
+     the project is, and what the tools do — so the answer to "where do you want
+     to go" is somewhere you can stay, bookmark and come back to. A reader
+     already on it is left alone rather than being navigated to the page they
+     are reading. */
+  function goHome() {
+    var here = (location.pathname || '').split('/').pop();
+    if (here === 'home.html') return;
+    location.href = 'home.html';
+  }
+
   function showOsChooser(andThen) {
-    const next = typeof andThen === 'function' ? andThen : showGeneratorJump;
+    const next = typeof andThen === 'function' ? andThen : goHome;
     const META = window.OS_META;
     // If os-meta.js did not load there is nothing honest to ask, so go straight
     // on rather than showing a chooser that cannot record an answer.
@@ -543,141 +562,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof window.refreshTooltips === 'function') window.refreshTooltips();
   }
 
-  // ─── Generator jump overlay ─────────────────────────────────────────────────
-  // Shown only when the user ticked the shortcut box. Two plain choices, each
-  // saying who it is for, so a first-time visitor picks the right one rather
-  // than guessing. Right-clicking either card opens its wiki explainer, matching
-  // the rest of the site.
-  // ─── Where to next ──────────────────────────────────────────────────────────
-  // Shown once, after agreeing. Every destination on the site, grouped, each
-  // with its own description and tooltip, so a first-time visitor can tell them
-  // apart rather than guessing from a name. The two generators are grouped
-  // together under "Build an install" because that is the choice people
-  // actually have to make; the rest are separate because they are separate
-  // things, not variations of one.
-  function showGeneratorJump() {
-    const overlay = makeOverlay();
-    const modal = makeModal();
-    modal.style.maxWidth = '760px';
-    modal.style.borderColor = 'var(--accent-cyan,#7dcfff)';
-
-    // Fullscreen on a phone: at 92% width inside a scrolling overlay these
-    // cards became a cramped strip with the page showing round the edges.
-    if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
-      Object.assign(modal.style, {
-        width: '100%', maxWidth: '100%', minHeight: '100vh',
-        borderRadius: '0', border: 'none', padding: '1.5rem 1.1rem',
-      });
-      Object.assign(overlay.style, { paddingTop: '0', paddingBottom: '0', alignItems: 'stretch' });
-    }
-
-    const GROUPS = [
-      {
-        heading: '🛠️ Build an install',
-        note: 'Both produce the same thing — a bash script and a matching markdown guide. They differ only in how much you decide up front.',
-        items: [
-          { href: 'index.html', icon: '⚙️', name: osName() + 'Install Generator',
-            tag: 'recommended on a PC', colour: 'var(--accent-blue,#7aa2f7)',
-            desc: 'One form, every option at once. Best if you already know what you want.',
-            tip: 'Set every option in a single form and generate a custom install script and guide. Fastest on a desktop.' },
-          { href: 'manual.html', icon: '🧭', name: osName() + 'Install Walkthrough',
-            tag: 'recommended on mobile', colour: 'var(--accent-purple,#bb9af7)',
-            desc: 'One question at a time, everything explained, the guide building as you answer.',
-            tip: 'Best on a phone, or if you are not sure yet — it walks you through each choice and says what it costs.' }
-        ]
-      },
-      {
-        heading: '🔍 Before you install',
-        note: 'Do this first. It comes before everything else.',
-        items: [
-          { href: 'iso-verify.html', icon: '💿', name: 'Verify ' + osName() + osMedia(),
-            tag: 'x86_64 and ARM', colour: 'var(--accent-green,#9ece6a)',
-            desc: 'Hash your download in the browser and check it against mirrors other than the one that served it.',
-            tip: 'The file never leaves your machine. A host that lies about the image cannot also hand you a matching checksum.' }
-        ]
-      },
-      {
-        heading: '📚 Read and explore',
-        note: 'The same material, written out — useful whether or not you use a generator.',
-        items: [
-          { href: 'site-index.html', icon: '🔎', name: 'Index',
-            tag: 'search everything', colour: 'var(--accent-cyan,#7dcfff)',
-            desc: 'One search box across the wiki, every generator and walkthrough question, the tools and the docs.',
-            tip: 'The contents page for the whole project. Start here if you do not know what you are looking for.' },
-          { href: 'wiki.html', icon: '📖', name: 'Wiki',
-            tag: 'install by hand', colour: 'var(--accent-cyan,#7dcfff)',
-            desc: 'Every option explained in full, plus firmware lockdown, dual boot, ARM and AUR safety.',
-            tip: 'The install written out longhand, with the decision points as branches you choose between.' },
-          { href: 'security-tools.html', icon: '🦀', name: 'Security Tools',
-            tag: 'optional', colour: 'var(--accent-red,#f7768e)',
-            desc: 'The Rust suite and the vetted third-party hardening tools. Several can lock you out — read first.',
-            tip: 'Libre OTP, Anti-Ducky, Anti-Evil Maid, Kernel Watcher and Scarecrow. Reproducible, GPG-signed builds.' },
-          { href: 'live.html', icon: '📝', name: 'Live Editor',
-            tag: 'edit and download', colour: 'var(--accent-orange,#ff9e64)',
-            desc: 'Edit a generated script and guide side by side, browse this session\'s history, and download.',
-            tip: 'Already have a generated script or a saved .json config? Load it here.' }
-        ]
-      }
-    ];
-
-    let html = `
-      <h2 style="color:var(--accent-cyan,#7dcfff); text-align:center; margin:0 0 0.4rem;">
-        Where would you like to start?
-      </h2>
-      <p style="color:#8b949e; text-align:center; font-size:0.85rem; margin:0 0 1.4rem;">
-        Everything here is optional and nothing is hidden — you can reach any of
-        these at any time from the header.
-      </p>`;
-
-    GROUPS.forEach(g => {
-      html += `
-        <div style="margin-bottom:1.3rem;">
-          <div style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.07em;
-                      color:var(--accent-cyan,#7dcfff); margin-bottom:0.2rem;">${g.heading}</div>
-          <div style="font-size:0.78rem; color:#8b949e; margin-bottom:0.6rem;">${g.note}</div>
-          <div style="display:flex; flex-direction:column; gap:0.55rem;">`;
-      g.items.forEach(it => {
-        html += `
-            <a href="${it.href}" class="jump-card nav-tooltip"
-               data-title="${it.icon} ${it.name}" data-desc="${it.tip}"
-               style="display:block; text-decoration:none; background:var(--bg-darker,#16161e);
-                      border:1px solid ${it.colour}; border-radius:10px; padding:0.8rem 0.95rem;">
-              <span style="display:block; font-weight:700; color:${it.colour}; font-size:0.98rem;">
-                ${it.icon} ${it.name}
-                <span style="font-size:0.7rem; color:var(--accent-green,#9ece6a); font-weight:400;">— ${it.tag}</span>
-              </span>
-              <span style="display:block; color:var(--fg-color,#a9b1d6); font-size:0.83rem; margin-top:0.25rem; line-height:1.55;">
-                ${it.desc}
-              </span>
-            </a>`;
-      });
-      html += `</div></div>`;
-    });
-
-    html += `
-      <button id="jump-skip" style="
-        display:block; margin:0.6rem auto 0; background:none; border:none;
-        color:#8b949e; font-family:var(--font-mono); font-size:0.82rem;
-        text-decoration:underline; cursor:pointer; min-height:44px;">
-        Close and browse on my own
-      </button>`;
-
-    modal.innerHTML = html;
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    document.body.style.overflow = 'hidden';
-
-    // Closing must never re-open the waiver. Acceptance is already recorded for
-    // the session by dismiss(), so this simply lets the page through.
-    modal.querySelector('#jump-skip').addEventListener('click', () => {
-      document.body.style.overflow = '';
-      overlay.remove();
-    });
-    modal.querySelectorAll('a[href]').forEach(a =>
-      a.addEventListener('click', () => { document.body.style.overflow = ''; }));
-
-    if (typeof window.refreshTooltips === 'function') window.refreshTooltips();
-  }
 
   // Show if not dismissed
   showWaiver();

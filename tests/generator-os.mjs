@@ -63,11 +63,35 @@ let checks = 0, fails = 0;
 const failures = [];
 const ok = (cond, label) => { checks++; if (!cond) { fails++; failures.push(label); } };
 
+/* Wait for the page to have finished running its scripts, rather than sleeping
+   a fixed time and hoping.
+
+   A fixed wait is a race that only shows up under load: run alone this gate
+   passed, and run inside the full suite — with another jsdom server and a
+   dozen Node processes competing — index.html had not finished executing when
+   it was inspected, and the gate reported that os-meta.js exposed nothing. A
+   gate that fails when the machine is busy is one people learn to re-run
+   instead of believe. */
+async function waitFor(window, predicate, what, ms = 15000) {
+    const deadline = Date.now() + ms;
+    for (;;) {
+        try { if (predicate(window)) return true; } catch (_) { /* still loading */ }
+        if (Date.now() > deadline) {
+            fails++; checks++;
+            failures.push(`timed out after ${ms}ms waiting for ${what}`);
+            return false;
+        }
+        await new Promise(r => setTimeout(r, 100));
+    }
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-os-'));
 const server = await serve(WEB);
 
 // Read the real metadata once, before any page mutates its own copy.
-const probe = await loadPage(JSDOM, VirtualConsole, server.origin, 'index.html', { wait: 1200 });
+const probe = await loadPage(JSDOM, VirtualConsole, server.origin, 'index.html', { wait: 300 });
+await waitFor(probe.window, w => w.OS_META && Object.keys(w.OS_META).length,
+              'os-meta.js to define OS_META');
 const META = JSON.parse(JSON.stringify(probe.window.OS_META || {}));
 probe.window.close();
 ok(Object.keys(META).length > 0, 'os-meta.js exposed no OS_META — nothing could be measured');
@@ -79,7 +103,13 @@ for (const id of Object.keys(META)) {
     const meta = META[id];
     const complete = meta.complete === true;
 
-    const { window } = await loadPage(JSDOM, VirtualConsole, server.origin, 'index.html', { wait: 1200 });
+    const { window } = await loadPage(JSDOM, VirtualConsole, server.origin, 'index.html', { wait: 300 });
+    if (!await waitFor(window, w => typeof w.generateOutput === 'function' &&
+                                    typeof w.setTargetOS === 'function' && w.OS_META,
+                       `${meta.label}: the generator's scripts to finish running`)) {
+        window.close();
+        continue;
+    }
 
     /* The lock, against the real metadata: an unfinished system must not be
        selectable, and the refusal has to happen here rather than in whichever

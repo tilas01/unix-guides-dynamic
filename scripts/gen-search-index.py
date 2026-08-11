@@ -40,6 +40,7 @@ PAGE_TITLES = {
     "releases.html": "Releases",
     "repo.html": "Repository",
     "site-index.html": "Index",
+    "home.html": "Home",
 }
 
 # Pages whose headings are navigation furniture rather than content.

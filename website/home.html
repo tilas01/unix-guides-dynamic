@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home — *nix Install Guides</title>
+    <meta name="description" content="The front door for the whole project: pick a system, then pick how you want to install it. Search every guide, wiki, cheatsheet and question from here.">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="preload" href="style.css" as="style">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preload" href="search-index.json" as="fetch" crossorigin="anonymous">
+    <link rel="prefetch" href="index.html">
+    <link rel="prefetch" href="manual.html">
+    <link rel="prefetch" href="wiki.html">
+    <style>
+        .home-head { text-align: center; margin-bottom: 1.6rem; }
+        .home-head h1 { color: var(--accent-cyan); margin-bottom: 0.5rem; }
+        .home-head p { color: var(--fg-dim); max-width: 74ch; margin: 0 auto 0.6rem; }
+        .home-os {
+            display: inline-block;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            padding: 0.35rem 0.95rem;
+            font-size: 0.85rem;
+            color: var(--fg-color);
+        }
+        .home-os strong { color: var(--accent-cyan); }
+
+        .search-shell { max-width: 900px; margin: 0 auto 2.2rem; }
+        #site-search {
+            width: 100%;
+            font-family: var(--font-mono);
+            font-size: 1.05rem;
+            background: var(--bg-dark);
+            color: var(--fg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.85rem 1rem;
+            min-height: 52px;
+        }
+        #site-search:focus-visible { border-color: var(--accent-cyan); outline: none; }
+        #site-search:disabled { opacity: 0.6; }
+        .search-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+            font-size: 0.78rem;
+            color: var(--fg-dim);
+            margin-top: 0.5rem;
+        }
+        .sort-wrap { display: inline-flex; align-items: center; gap: 0.4rem; }
+        .sort-wrap label { font-size: 0.74rem; color: var(--fg-dim); }
+        #sort-mode {
+            background: var(--bg-dark);
+            color: var(--fg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.74rem;
+        }
+        #sort-mode:focus-visible { border-color: var(--accent-cyan); outline: none; }
+        #search-results { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.9rem; }
+
+        .route-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2.4rem;
+        }
+        .route-card {
+            display: block;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-left-width: 4px;
+            border-radius: 10px;
+            padding: 1.1rem 1.2rem;
+            text-decoration: none;
+            color: var(--fg-color);
+            /* Transform and opacity only, so the hover cannot cause a reflow on
+               a page that may be showing a long list of search results. */
+            transition: transform 0.14s ease, border-color 0.14s ease;
+        }
+        .route-card:hover, .route-card:focus-visible { transform: translateY(-2px); }
+        .route-card h3 { margin: 0 0 0.4rem; font-size: 1.02rem; }
+        .route-card p { margin: 0; font-size: 0.86rem; color: var(--fg-dim); line-height: 1.6; }
+        .route-card .when {
+            display: block;
+            margin-top: 0.55rem;
+            font-size: 0.78rem;
+            color: var(--fg-dim);
+            font-style: italic;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .route-card { transition: none; }
+            .route-card:hover, .route-card:focus-visible { transform: none; }
+        }
+
+        .home-section { margin-bottom: 2.4rem; }
+        .home-section > h2 { color: var(--accent-purple); margin-bottom: 0.6rem; }
+        .home-section > p { color: var(--fg-dim); max-width: 78ch; line-height: 1.7; }
+
+        .tool-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.8rem; }
+        .tool-list div {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.8rem 0.95rem;
+        }
+        .tool-list strong { color: var(--accent-cyan); display: block; margin-bottom: 0.25rem; font-size: 0.92rem; }
+        .tool-list span { font-size: 0.83rem; color: var(--fg-dim); line-height: 1.6; }
+
+        .home-credit {
+            text-align: center;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.3rem;
+            color: var(--fg-dim);
+            font-size: 0.86rem;
+            line-height: 1.7;
+        }
+        .home-credit a { color: var(--accent-purple); }
+    </style>
+    <script src="os-meta.js"></script>
+    <script src="os-install.js"></script>
+    <script src="legal.js"></script>
+</head>
+<body>
+
+<noscript>
+    <div class="alert warning">
+        Search needs JavaScript. Every destination on this page is an ordinary
+        link and works without it, and the <a href="site-index.html">index</a>
+        lists everything by hand.
+    </div>
+</noscript>
+
+<header>
+    <a href="https://github.com/tilas01/unix-guides-dynamic" class="banner-link" target="_blank" rel="noopener">
+        <img src="img/banner.png" alt="*nix Install Guides Banner" class="banner">
+    </a>
+    <nav class="main-nav" aria-label="Site">
+        <a href="home.html" class="nav-link nav-tooltip" style="color:var(--accent-cyan);" data-title="🏠 Home" data-desc="You are here. Pick a system, then pick how you want to install it, and search everything from one box.">🏠 Home</a>
+        <span class="nav-sep">|</span>
+        <a href="site-index.html" class="nav-link nav-tooltip" data-title="🔎 Index" data-desc="The contents page for the whole project.">🔎 Index</a>
+        <span class="nav-sep">|</span>
+        <a href="index.html" class="nav-link nav-tooltip" data-title="⚙️ *nix Install Generator" data-desc="Fill in a form, get a script and a guide.">⚙️ *nix Install Generator</a>
+        <span class="nav-sep">|</span>
+        <a href="manual.html" class="nav-link nav-tooltip" data-title="🧭 *nix Install Walkthrough" data-desc="One question at a time, every option explained.">🧭 *nix Install Walkthrough</a>
+        <span class="nav-sep">|</span>
+        <a href="iso-verify.html" class="nav-link nav-tooltip" data-title="💿 Verify Arch ISO" data-desc="Hash an image in your browser and check it against mirrors other than the one that served it.">💿 Verify Arch ISO</a>
+        <span class="nav-sep">|</span>
+        <a href="security-tools.html" class="nav-link nav-tooltip" data-title="🦀 Security Tools" data-desc="The Rust security suite and the vetted third-party hardening tools.">🦀 Security Tools</a>
+        <span class="nav-sep">|</span>
+        <a href="wiki.html" class="nav-link nav-tooltip" data-title="📖 Wiki" data-desc="Every option explained in full.">📖 Wiki</a>
+    </nav>
+</header>
+
+<main>
+    <div class="home-head">
+        <h1>*nix Install Guides</h1>
+        <p>
+            Install and harden a *nix system, with every choice explained before
+            you make it. Nothing here runs on a server: the guides are built in
+            your browser, and no answer you give leaves the machine.
+        </p>
+        <p class="home-os" id="home-os-line">
+            Building guides for <strong id="home-os-name">Arch Linux</strong>.
+            Change it from the switcher in the top-left corner.
+        </p>
+    </div>
+
+    <!-- Search first, because somebody arriving with a specific question should
+         not have to guess which of the four routes holds the answer. Wired to
+         site-index.js by element id, so this box searches the same index the
+         Index page does — every wiki section, every generator and walkthrough
+         question, every cheatsheet and every document, across every system. -->
+    <div class="search-shell">
+        <label class="visually-hidden" for="site-search">Search every guide, wiki and question</label>
+        <input type="search" id="site-search" disabled autocomplete="off"
+               spellcheck="false" placeholder="Loading the search index…"
+               aria-describedby="search-status">
+        <div class="search-meta">
+            <span id="search-status">Loading the search index…</span>
+            <span class="sort-wrap" id="sort-wrap" hidden>
+                <label for="sort-mode">Sort</label>
+                <select id="sort-mode">
+                    <option value="relevance">Relevance</option>
+                    <option value="az">A–Z</option>
+                    <option value="section">Section</option>
+                </select>
+            </span>
+            <span><kbd>/</kbd> to focus · <kbd>↓</kbd> to walk results · <kbd>Enter</kbd> opens the first · <span id="result-count"></span></span>
+        </div>
+        <div id="search-results" hidden></div>
+    </div>
+
+    <h2 class="section-heading">Where do you want to go?</h2>
+    <div class="route-grid">
+        <a class="route-card" href="iso-verify.html" style="border-left-color:var(--accent-green);">
+            <h3 style="color:var(--accent-green);">💿 Verify your image first</h3>
+            <p>
+                Hash the image in your browser and check it against mirrors other
+                than the one that served it, so a host that lies about the image
+                cannot also hand you a matching checksum.
+            </p>
+            <span class="when">Start here. It comes before everything else.</span>
+        </a>
+        <a class="route-card" href="manual.html" style="border-left-color:var(--accent-purple);">
+            <h3 style="color:var(--accent-purple);">🧭 Walkthrough</h3>
+            <p>
+                One question at a time, each explaining what it does and what it
+                costs, with the guide building itself as you answer.
+            </p>
+            <span class="when">Recommended on a phone, or if you are not yet sure what you want.</span>
+        </a>
+        <a class="route-card" href="index.html" style="border-left-color:var(--accent-blue);">
+            <h3 style="color:var(--accent-blue);">⚙️ Generator</h3>
+            <p>
+                One form, every option at once, straight to a script and a guide.
+                The same install as the walkthrough by a shorter road.
+            </p>
+            <span class="when">Fastest on a desktop when you already know what you want.</span>
+        </a>
+        <a class="route-card" href="wiki.html" style="border-left-color:var(--accent-cyan);">
+            <h3 style="color:var(--accent-cyan);">📖 Wiki</h3>
+            <p>
+                The same install written out longhand, with the decision points as
+                branches you choose between, plus firmware lockdown, dual boot and
+                AUR safety.
+            </p>
+            <span class="when">For reading rather than generating.</span>
+        </a>
+        <a class="route-card" href="security-tools.html" style="border-left-color:var(--accent-red);">
+            <h3 style="color:var(--accent-red);">🦀 Security tools</h3>
+            <p>
+                The Rust suite and the third-party hardening tools, each with an
+                honest account of what it cannot do.
+            </p>
+            <span class="when">Optional, and several can lock you out. Read first.</span>
+        </a>
+        <a class="route-card" href="site-index.html" style="border-left-color:var(--accent-orange);">
+            <h3 style="color:var(--accent-orange);">🔎 Index</h3>
+            <p>
+                Everything in the project listed by section, for browsing rather
+                than searching.
+            </p>
+            <span class="when">When you would rather see the shape of it.</span>
+        </a>
+    </div>
+
+    <div class="home-section">
+        <h2>What this project is</h2>
+        <p>
+            Four routes to the same install, so you can pick the one that suits
+            how you think. Answer the questions and you get a script and a
+            matching guide, with every command explained and nothing hidden —
+            the script is the thing you read before you run it, not a black box.
+        </p>
+        <p>
+            The site is static and hosted on GitHub Pages. There is no account,
+            no tracking and no server to send anything to; what persistence
+            exists is your own browser's storage, and clearing it clears
+            everything. Where this project and a system's official documentation
+            disagree, the official documentation is right and this is a bug.
+        </p>
+    </div>
+
+    <div class="home-section">
+        <h2>The security tools, briefly</h2>
+        <p>
+            Written in Rust, built and signed in CI, and each shipped with a
+            section naming what it cannot do. They are optional. Several can lock
+            you out of your own machine if misconfigured, which is why the
+            <a href="security-tools.html">tools page</a> explains each one in
+            full before you enable it.
+        </p>
+        <div class="tool-list">
+            <div><strong>libre-otp</strong><span>Two-factor at boot, login and SSH, without a proprietary token.</span></div>
+            <div><strong>anti-evil-maid</strong><span>Baselines the boot chain and tells you when it changes. Software hashing, not a hardware root of trust — and it says so.</span></div>
+            <div><strong>anti-ducky</strong><span>Blocks BadUSB keystroke-injection devices pretending to be a keyboard.</span></div>
+            <div><strong>kernel-watcher</strong><span>Watches the filesystem for infostealer and rootkit behaviour.</span></div>
+            <div><strong>scarecrow</strong><span>Canary tokens, sandbox spoofing, and duress handling that never announces itself on screen.</span></div>
+            <div><strong>pi-boot-guard</strong><span>Raspberry Pi boot integrity. Reports the EEPROM state and refuses to fuse OTP, which is irreversible.</span></div>
+            <div><strong>aur-guard</strong><span>Reads a PKGBUILD before you build it. Never needs root.</span></div>
+        </div>
+    </div>
+
+    <p class="home-credit">
+        Built by <a href="https://github.com/tilas01" target="_blank" rel="noopener">tilas01</a> ·
+        <a href="https://github.com/tilas01/unix-guides-dynamic" target="_blank" rel="noopener">source on GitHub</a> ·
+        MIT licensed. Written in collaboration with Claude.<br>
+        Provided as is. Read every command before you run it — these scripts
+        repartition disks.
+    </p>
+</main>
+
+<footer class="site-footer"></footer>
+
+<script src="site-index.js" defer></script>
+<script src="tooltip.js" defer></script>
+<script src="shared-ui.js" defer></script>
+<script src="markdown.js" defer></script>
+<script src="highlight.js" defer></script>
+<script>
+/* Name the selected system in the page body, not only in the corner switcher.
+   The header shows it, but somebody landing here from the chooser has just
+   answered that question and should see the answer reflected where they are
+   looking. Reads through os-meta.js so there is one definition of the label. */
+(function () {
+    'use strict';
+    function paint() {
+        var el = document.getElementById('home-os-name');
+        if (!el || typeof window.targetOS !== 'function' || !window.OS_META) return;
+        var meta = window.OS_META[window.targetOS()];
+        if (meta) el.textContent = meta.label;
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', paint);
+    } else {
+        paint();
+    }
+    // The switcher announces changes on the document; follow them rather than
+    // needing a reload.
+    document.addEventListener('unix:os-changed', paint);
+})();
+</script>
+</body>
+</html>

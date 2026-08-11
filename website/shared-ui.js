@@ -45,6 +45,13 @@
        A page that already has a .main-nav has it normalised in place; a page
        with none gets one. */
     var NAV = [
+        // First, because it is where the chooser sends a reader once they have
+        // picked a system: one page that says what the project is, offers the
+        // four routes into it, and searches the whole index without having to
+        // guess which route holds the answer.
+        { href: 'home.html',          label: '🏠 Home',
+          title: '🏠 Home',
+          desc: 'The front door. What this project is, the four ways into it, and a search box that covers every guide, wiki section, question and document at once.' },
         { href: 'site-index.html',    label: '🔎 Index',
           title: '🔎 Index',
           desc: 'The contents page for the whole project, with a search box that looks through the wiki, every generator and walkthrough question, the security tools, the cheatsheets and the docs at once.' },
