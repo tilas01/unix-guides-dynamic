@@ -399,13 +399,36 @@ document.addEventListener('DOMContentLoaded', () => {
       { key: 'linux', heading: 'Linux',
         note: 'One kernel, shared tooling. LUKS for encryption, systemd or ' +
               'OpenRC for init, and the same filesystems throughout.',
-        members: ['arch', 'gentoo', 'raspios'] },
+        members: ['arch', 'gentoo'] },
       { key: 'bsd', heading: 'BSD',
         note: 'Not Linux, and not a variant of it. A different kernel and a ' +
               'complete base system developed together, with its own installer, ' +
               'its own package tools, geli or softraid instead of LUKS, and pf ' +
               'for the firewall. Very little transfers across.',
-        members: ['freebsd', 'openbsd'] }
+        members: ['openbsd', 'freebsd'] },
+      /* Last, and set apart, because it is the one entry here that most people
+         should not need. Raspberry Pi OS is Debian on ARM and its official
+         imager writes and verifies the card for you — there is no partitioning
+         to get wrong and no bootstrap to script, so an install guide has very
+         little to add. What this project can add is the hardening, which is why
+         the section says so rather than pretending the guide is the point. */
+      { key: 'arm', heading: 'ARM single-board computers',
+        note: 'You very likely do not need a guide for this one, and it is ' +
+              'listed last for that reason. The official Raspberry Pi Imager ' +
+              'writes the card and verifies it afterwards, which is the whole ' +
+              'install. Reach for this only for what comes next: the security ' +
+              'tools, EEPROM boot verification, and anti-evil-maid adapted to a ' +
+              'board with no TPM and no UEFI.',
+        members: ['raspios'],
+        footnote:
+          'Two honest reasons to use it anyway. You are new to this and want ' +
+          'the hardening explained while you apply it. Or you know exactly ' +
+          'what you are doing and want the same build twice, without writing a ' +
+          'playbook you then have to maintain. Be clear about that second one: ' +
+          'if you are managing a fleet, Ansible or something like it is the ' +
+          'better tool and will fail less often than generated commands. This ' +
+          'is for one board, or a few, where the upkeep of a playbook costs ' +
+          'more than it saves.' }
     ];
 
     FAMILIES.forEach(fam => {
@@ -450,6 +473,12 @@ document.addEventListener('DOMContentLoaded', () => {
         </button>`;
       });
       html += `</div>`;
+      if (fam.footnote) {
+        html += `
+        <p style="font-size:0.78rem; color:#8b949e; margin:0.55rem 0 0; line-height:1.6;">
+          ${fam.footnote}
+        </p>`;
+      }
     });
 
     html += `
