@@ -242,6 +242,14 @@ jobs:
         run: npm run toolsupport
         working-directory: tests
 
+      # Characters nobody typed: byte-order marks, zero-width spaces, a
+      # non-breaking space inside a command, UTF-16, and the mojibake a UTF-8
+      # round trip through Latin-1 leaves behind. Each of these is invisible in
+      # an editor and breaks something at a distance.
+      - name: "Test: no stray characters"
+        run: npm run stray
+        working-directory: tests
+
       - name: "Test: HTML validity"
         run: npm run html
         working-directory: tests

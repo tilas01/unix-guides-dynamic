@@ -87,6 +87,51 @@ document.addEventListener('DOMContentLoaded', () => {
         </p>
       </div>
 
+      <!-- What the name means.
+           Asked for by name, and it earns its place: the site is called *nix
+           Install Guides and offers Linux distributions alongside two BSDs,
+           which only makes sense once you know what the asterisk is doing. Kept
+           to a details element so it explains on demand rather than standing
+           between a first-time reader and the disclaimer they have to read. -->
+      <details style="background:var(--bg-lighter,#24283b); border-radius:10px; padding:0.85rem 1.2rem; margin-bottom:1rem; font-size:0.85rem; line-height:1.65;">
+        <summary style="cursor:pointer; color:var(--accent-cyan,#7dcfff); font-weight:700;">
+          Why "*nix", and what is Unix?
+        </summary>
+        <p style="margin:0.7rem 0 0.7rem;">
+          The <strong>*</strong> is a wildcard, the same one a shell uses. <strong>*nix</strong>
+          means <em>any</em> system of that family — Linux, the BSDs, Solaris, macOS —
+          rather than one particular product. In everyday use people say
+          <em>*nix</em>, <em>Unix</em> and <em>Unix-like</em> more or less interchangeably.
+        </p>
+        <p style="margin:0 0 0.7rem;">
+          <strong>UNIX</strong> itself began at AT&amp;T's Bell Labs in 1969. It was
+          proprietary — closed source, licensed, nothing like the philosophy this
+          project is built on. What spread was not the code so much as the
+          <em>shape</em>: a hierarchical filesystem, small programs piped together,
+          almost everything represented as a file, a shell as the ordinary way to
+          drive the machine. That shape is what nearly every system here inherits.
+        </p>
+        <p style="margin:0 0 0.7rem;">
+          Today <strong>UNIX</strong> is a certification rather than a product. The
+          trademark belongs to <a href="https://www.opengroup.org/" target="_blank" rel="noopener"
+          style="color:var(--accent-purple,#bb9af7);">The Open Group</a>, and a system may
+          be called UNIX only if it has been certified against the Single UNIX
+          Specification. The commercial Unixes that were certified — IBM's
+          <strong>AIX</strong>, Oracle's <strong>Solaris</strong>, <strong>HP-UX</strong> —
+          each shipped with that vendor's own hardware, and all of them have been
+          largely displaced by Linux. <strong>macOS is certified UNIX</strong>, which
+          makes it by some distance the most widely used one.
+        </p>
+        <p style="margin:0;">
+          <strong>Linux and the BSDs are not certified</strong>, and that is a
+          licensing decision rather than a technical verdict — certification costs
+          money and constrains what you may change. Linux is a kernel written from
+          scratch to behave like Unix; the BSDs descend from Berkeley's branch of the
+          original code. Hence <em>*nix</em>: the honest word for the whole family,
+          which is what this site covers.
+        </p>
+      </details>
+
       <!-- Blurb -->
       <div style="background:var(--bg-lighter,#24283b); border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.5rem; font-size:0.85rem; line-height:1.65;">
         <p style="margin:0 0 0.7rem;">
