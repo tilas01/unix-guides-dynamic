@@ -97,6 +97,7 @@ probe.window.close();
 ok(Object.keys(META).length > 0, 'os-meta.js exposed no OS_META — nothing could be measured');
 
 const leakage = {};
+const mentions = {};
 const rows = [];
 
 for (const id of Object.keys(META)) {
@@ -200,10 +201,30 @@ for (const id of Object.keys(META)) {
                       String(e.stderr || e.message).split('\n')[0]);
     }
 
+    /* Commands and comments are counted separately, and neither is discarded.
+     *
+     * A guide that says "this system has no mkinitcpio; here is what it uses
+     * instead" names a foreign tool on purpose, and that is the opposite of the
+     * defect being measured — but it is also exactly how an exemption starts,
+     * so nothing is exempted. The two counts are reported side by side: the
+     * command count is what fails a badged system, and the comment count is
+     * printed so a comment that quietly grows into an instruction is visible
+     * rather than filtered out.
+     *
+     * A comment here means a whole line whose first non-space character is `#`,
+     * inside the script or inside the guide's fenced blocks — not a `#` part
+     * way along a line, which in shell can follow a real command. */
+    const isComment = line => /^\s*#/.test(line);
+    const commandText = all.split('\n').filter(l => !isComment(l)).join('\n');
+    const commentText = all.split('\n').filter(isComment).join('\n');
+
     const found = [];
+    const inComments = [];
     for (const t of OWNED) {
         if (t.owner === id) continue;
-        const n = (all.match(t.re) || []).length;
+        const n = (commandText.match(t.re) || []).length;
+        const c = (commentText.match(t.re) || []).length;
+        if (c) inComments.push(`${t.what}x${c}`);
         if (!n) continue;
         found.push(`${t.what}x${n}`);
         if (complete) {
@@ -213,6 +234,7 @@ for (const id of Object.keys(META)) {
         }
     }
     if (found.length) leakage[meta.label] = found;
+    if (inComments.length) mentions[meta.label] = inComments;
 
     rows.push(`${meta.label.padEnd(18)} guide ${String(md.length).padStart(6)} chars, ` +
               `script ${String(sh.length).padStart(6)} chars, post ${String(post.length).padStart(6)}`);
@@ -232,6 +254,16 @@ if (Object.keys(leakage).length) {
     console.log('than failed: no reader reaches one. It becomes a failure the moment a');
     console.log('badge lifts, and the number is the work needed before one can.');
     for (const [label, found] of Object.entries(leakage)) {
+        console.log(`  ${label.padEnd(18)} ${found.join(', ')}`);
+    }
+}
+
+if (Object.keys(mentions).length) {
+    console.log('');
+    console.log('Named in comments, not run. Explaining what a system does NOT use is');
+    console.log('part of the job; this is printed so a comment that grows into an');
+    console.log('instruction is visible rather than filtered away.');
+    for (const [label, found] of Object.entries(mentions)) {
         console.log(`  ${label.padEnd(18)} ${found.join(', ')}`);
     }
 }

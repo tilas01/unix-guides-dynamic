@@ -624,13 +624,7 @@
             /* The stage3 answer decides the autobuilds directory, and it has to
                agree with the profile chosen below. Naming the exact path is the
                difference between "go and find one" and a command they can run. */
-            const STAGE3_DIR = {
-                'openrc': 'current-stage3-amd64-openrc',
-                'systemd': 'current-stage3-amd64-systemd',
-                'hardened-openrc': 'current-stage3-amd64-hardened-openrc',
-                'musl': 'current-stage3-amd64-musl'
-            };
-            const stage3Dir = STAGE3_DIR[s.gentoo_stage3] || STAGE3_DIR.openrc;
+            const stage3Dir = M.stage3.dirFor(s.gentoo_stage3);
             L.push('# Pick a mirror:  ' + M.stage3.mirrorList);
             L.push('# Newest tarball under:');
             L.push('#   releases/amd64/autobuilds/' + stage3Dir + '/');
@@ -679,15 +673,9 @@
             L.push('');
             /* Every line here is an answer the reader gave. A question that
                does not reach make.conf is a control wired to nothing. */
-            const MAKEOPTS = { nproc: '-j$(nproc)', half: '-j$(( $(nproc) / 2 ))', '1': '-j1' };
-            const USE_SETS = {
-                profile: '',
-                desktop: 'USE="elogind dbus policykit -systemd"',
-                minimal: 'USE="-X -wayland -bluetooth -pulseaudio -gtk -qt5"'
-            };
-            const makeopts = MAKEOPTS[s.gentoo_makeopts] || MAKEOPTS.nproc;
-            const useLine = USE_SETS[s.gentoo_use] !== undefined
-                ? USE_SETS[s.gentoo_use] : USE_SETS.profile;
+            const makeopts = M.makeopts[s.gentoo_makeopts] || M.makeopts.nproc;
+            const useLine = M.useSets[s.gentoo_use] !== undefined
+                ? M.useSets[s.gentoo_use] : M.useSets.profile;
             L.push('```bash');
             L.push('cat >> /mnt/gentoo/etc/portage/make.conf <<EOF');
             L.push('COMMON_FLAGS="-O2 -pipe -march=native"');
@@ -748,15 +736,15 @@
             L.push('```bash');
             L.push(M.install(['sys-kernel/linux-firmware']));
             if (s.gentoo_kernel === 'manual') {
-                L.push(M.install(['sys-kernel/gentoo-sources', 'sys-apps/pciutils']));
+                L.push(M.install(M.kernelPkgs.manual));
                 L.push('cd /usr/src/linux');
                 L.push('make menuconfig');
                 L.push('make -j$(nproc) && make modules_install');
                 L.push('make install');
             } else if (s.gentoo_kernel === 'dist') {
-                L.push(M.install(['sys-kernel/gentoo-kernel']));
+                L.push(M.install(M.kernelPkgs.dist));
             } else {
-                L.push(M.install(['sys-kernel/gentoo-kernel-bin']));
+                L.push(M.install(M.kernelPkgs.bin));
             }
             L.push('```');
             L.push('');
@@ -870,12 +858,11 @@
             L.push('is rebuilt automatically whenever a kernel is installed.');
             L.push('');
             L.push('```bash');
-            L.push('echo "sys-kernel/installkernel dracut" >> /etc/portage/package.use/installkernel');
-            L.push('emerge --verbose --noreplace sys-kernel/installkernel');
+            M.dracut.enable.forEach(c => L.push(c));
             L.push('');
             L.push("mkdir -p /etc/dracut.conf.d");
             L.push("cat > /etc/dracut.conf.d/luks.conf <<'EOF'");
-            L.push('add_dracutmodules+=" crypt dm rootfs-block "');
+            L.push(M.dracut.cryptModules);
             L.push('EOF');
             L.push('```');
             L.push('');

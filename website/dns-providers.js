@@ -79,9 +79,48 @@
         ];
     }
 
+    /**
+     * The same upstreams for a system with no systemd-resolved.
+     *
+     * An OpenRC machine has no `resolved` to configure, so a drop-in written
+     * there is a file nothing reads — encrypted DNS that is configured, looks
+     * configured, and never runs. Stubby is the equivalent daemon: it listens on
+     * localhost and forwards over TLS, and `tls_auth_name` is its spelling of
+     * the certificate pin that `address#hostname` provides on the other side.
+     * Without that field stubby will accept any certificate chaining to a
+     * trusted root, which is the same quiet failure.
+     *
+     * @param {object} prov  an entry from DNS_PROVIDERS
+     * @param {string} mode  'both' (default) or 'ipv4' — IPv4 only
+     */
+    function buildStubbyConf(prov, mode) {
+        var addrs = mode === 'ipv4' ? prov.v4.slice() : prov.v4.concat(prov.v6);
+        var out = [
+            'resolution_type: GETDNS_RESOLUTION_STUB',
+            'dns_transport_list:',
+            '  - GETDNS_TRANSPORT_TLS',
+            // Refuse to fall back to plaintext. The default list continues to
+            // UDP when TLS fails, which turns an unreachable resolver into a
+            // silent downgrade rather than an error.
+            'tls_authentication: GETDNS_AUTHENTICATION_REQUIRED',
+            'tls_query_padding_blocksize: 128',
+            'idle_timeout: 10000',
+            'listen_addresses:',
+            '  - 127.0.0.1@53',
+            '  - 0::1@53',
+            'upstream_recursive_servers:'
+        ];
+        addrs.forEach(function (a) {
+            out.push('  - address_data: ' + a);
+            out.push('    tls_auth_name: "' + prov.tls + '"');
+        });
+        return out;
+    }
+
     root.DnsProviders = {
         table: DNS_PROVIDERS,
         dnsLine: dnsLine,
-        buildResolvedConf: buildResolvedConf
+        buildResolvedConf: buildResolvedConf,
+        buildStubbyConf: buildStubbyConf
     };
 })(typeof window !== 'undefined' ? window : globalThis);

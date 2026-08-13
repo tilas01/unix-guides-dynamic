@@ -839,6 +839,31 @@ document.addEventListener('DOMContentLoaded', () => {
 const gv = (id, def = '') => { const e = document.getElementById(id); return e ? e.value : def; };
 const gi = (id, def = 1) => { const e = document.getElementById(id); return e ? parseInt(e.value) || def : def; };
 
+/* The target system's install model, resolved once per generation.
+ *
+ * generateOutput() works it out from os-meta.js and os-install.js, and most of
+ * the emitting happens inside it where that is a local. But several sections
+ * are top-level functions rather than closures — the USB-kill switch, the LUKS
+ * duress passphrase — and they emit package and service commands too. Threading
+ * the model through their signatures would change five call sites for one fact
+ * that is the same for the whole run, so it is set here instead, before any of
+ * them is called.
+ *
+ * Arch is the resting value, so a builder called before a generation (or in a
+ * harness that never runs one) emits what it always emitted.
+ */
+let genOs = { key: 'arch', label: 'Arch Linux', model: null, init: null,
+              openrc: false, gentoo: false, mnt: '/mnt' };
+
+/* Package name and service commands for whichever system is selected, usable
+   from the top-level builders. Each falls back to Arch's own spelling, which is
+   what these were before the table existed. */
+const genPkgs = list => (window.osPkgNames ? window.osPkgNames(genOs.key, list) : list);
+const genInstall = list => (genOs.model
+    ? genOs.model.install(genPkgs(list))
+    : 'pacman -S --needed --noconfirm ' + list.join(' '));
+const genSvc = unit => (genOs.init ? genOs.init.enable(unit) : 'systemctl enable ' + unit);
+
 // ====================================================================
 // MAIN OUTPUT GENERATOR
 // ====================================================================
@@ -1143,8 +1168,80 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
        and pressing Generate produces output for the system now selected. */
     const osMeta = (typeof window.targetOS === 'function' && window.OS_META)
         ? window.OS_META[window.targetOS()] : null;
+    const osKey = (typeof window.targetOS === 'function' && osMeta) ? window.targetOS() : 'arch';
     const osLabel = osMeta ? osMeta.label : 'Arch Linux';
     const osUnfinished = !!(osMeta && osMeta.complete === false);
+
+    /* How this system installs, from os-install.js — the same lookup the
+       walkthrough makes, so the two front ends cannot disagree about what a
+       Gentoo install looks like.
+
+       A system whose emitters are not written yet has no model and borrows
+       Arch's commands rather than throwing, because throwing would take the
+       read-only preview down with it. The guide then says so in as many words,
+       and no reader can reach one of these anyway: setTargetOS() refuses to
+       select an unfinished system. */
+    const hasModel = window.osHasInstallModel ? window.osHasInstallModel(osKey) : (osKey === 'arch');
+    const modelKey = hasModel ? osKey : 'arch';
+    const M = window.osInstallModel ? window.osInstallModel(modelKey) : null;
+    const isGentoo = !!(M && M.family === 'gentoo');
+
+    /* Gentoo's stage3 answer decides its init, which is why there is no
+       separate profile question: one answer settles the tarball, the profile
+       and every service command below. */
+    const gentooStage3 = gv('gentoo_stage3', 'openrc');
+    const gentooKernel = gv('gentoo_kernel', 'bin');
+    const gentooBinpkgs = gv('gentoo_binpkgs', 'big');
+    const gentooMakeopts = gv('gentoo_makeopts', 'nproc');
+    const gentooUse = gv('gentoo_use', 'profile');
+    const modelInit = isGentoo ? M.stage3.initFor(gentooStage3) : null;
+    const I = window.osInitOf
+        ? window.osInitOf(modelKey, { init_system: modelInit })
+        : null;
+
+    /* Per-system command shapes. On Arch every one of these resolves to exactly
+       the string that was hard-coded here before, which is what keeps the
+       permutation assertions meaningful while other systems are added. */
+    const pkgOf = n => (window.osPkgName ? window.osPkgName(modelKey, n) : n);
+    const pkgsOf = l => (window.osPkgNames ? window.osPkgNames(modelKey, l) : l);
+    /* Install, skipping what is already present. */
+    const instNeeded = l => M.install(pkgsOf(l));
+    /* Install unconditionally — the form the post-install sections use. */
+    const inst = l => M.installPlain(pkgsOf(l));
+    /* Enabling a service is the one command that differs by init rather than by
+       system, so it comes from the init table and takes the bare name. */
+    const svc = u => (I ? I.enable(u) : 'systemctl enable ' + u);
+    const svcNow = u => (I ? I.enableNow(u) : 'systemctl enable --now ' + u);
+    const openrc = !!(I && I.label === 'OpenRC');
+    /* A repeating job. systemd expresses it as a timer unit and OpenRC has no
+       equivalent at all, so the same schedule becomes a cron entry — which is
+       a real difference in what has to be installed, not a spelling of the same
+       command. Callers give both, because only they know the schedule. */
+    const repeating = (units, cronPath, cronLines, now) => {
+        if (!openrc) return `systemctl enable ${now === false ? '' : '--now '}${units}`;
+        /* printf rather than a heredoc: these are emitted inside indented shell
+           functions in places, and an indented heredoc terminator ends nothing.
+           One command on one line is safe wherever it lands. */
+        return `printf '${cronLines.join('\\n')}\\n' > ${cronPath} && chmod 644 ${cronPath}`;
+    };
+    /* The snapshot schedule, which is two timer units on systemd and one cron
+       file otherwise. Named because three separate places emit it. */
+    const snapperTimeline = now => repeating(
+        'snapper-timeline.timer snapper-cleanup.timer',
+        '/etc/cron.d/snapper',
+        ['0 * * * * root /usr/bin/snapper --config root create --description timeline --cleanup-algorithm timeline',
+         '30 * * * * root /usr/bin/snapper --config root cleanup timeline'], now);
+    /* Where the new system is mounted. Arch's installer works at /mnt; the
+       Gentoo Handbook uses /mnt/gentoo throughout and the chroot commands in
+       os-install.js are written against that path, so the two must agree. */
+    const mntRoot = isGentoo ? '/mnt/gentoo' : '/mnt';
+    /* Running one script inside the new system. Arch has a wrapper that does
+       the bind mounts; Gentoo does them beforehand and then plain-chroots. */
+    const chrootRun = f => (isGentoo ? `chroot ${mntRoot} /bin/bash ${f}` : `arch-chroot /mnt ${f}`);
+    /* Published for the top-level builders called further down, which emit
+       package and service commands of their own. */
+    genOs = { key: modelKey, label: osLabel, model: M, init: I,
+              openrc: openrc, gentoo: isGentoo, mnt: mntRoot };
 
     // Build output
     function buildOutput(cmdOnly) {
@@ -1303,8 +1400,19 @@ run_with_progress() {
                 o += `echo -e "\\e[32m[+] Credentials cached securely. Starting unattended installation...\\e[0m"\nsleep 2\n\n`;
             }
 
-            // Jetbrains Mono Setup via pacman (only if baremetal, wait, TTY can only use PSF fonts like terminus)
-            o += `pacman -Sy --noconfirm terminus-font\nsetfont ter-v24b\n\n`;
+            /* A console font large enough to read the passphrase prompt on a
+               high-resolution panel. A TTY can only use PSF fonts, so this is
+               terminus rather than the font the installed system will use.
+
+               Only Arch's installer needs the package fetched: Gentoo's admin
+               CD already carries terminus, and reaching for a package manager
+               inside somebody else's live environment is how a guide starts
+               issuing commands that do not exist there. */
+            if (isGentoo) {
+                o += `setfont ter-v24b 2>/dev/null || true\n\n`;
+            } else {
+                o += `pacman -Sy --noconfirm terminus-font\nsetfont ter-v24b\n\n`;
+            }
             
             o += `# 1. Partitioning\n`;
         }
@@ -1467,17 +1575,94 @@ run_with_progress() {
         let allKernels = kernelMain + " " + kernelMain + "-headers";
         if (kernelBackup !== "none") allKernels += " " + kernelBackup + " " + kernelBackup + "-headers";
 
-        if (cmdOnly) o += `echo -e "\\n\${COLOR_BLUE}:: Step 2: Base System Installation (pacstrap)\${COLOR_RESET}\\n\${COLOR_FG}Downloading and installing the base OS, kernel (${kernelMain}), drivers, and essential tools.\\nWiki: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages\${COLOR_RESET}"\n`;
-        if (verbosity_level === 'progress') {
-            o += `run_with_progress "pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg}" "Installing Base System"\n`;
-        } else if (verbosity_level === 'simple') {
-            o += `pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg} >/dev/null 2>&1\n`;
+        if (isGentoo) {
+            /* Not pacstrap with different words. Gentoo's base system is a
+               signed tarball that gets verified and unpacked by hand, the
+               chroot is assembled by hand because there is no arch-chroot, and
+               the compile options have to be settled before anything is built.
+               Same sequence, same reasoning and the same commands as the
+               walkthrough emits, because both read os-install.js.
+
+               Everything inside a ```bash fence is lifted into the runnable
+               script, so a placeholder has to be valid shell as well as
+               readable: an angle-bracket placeholder is a redirection and makes
+               the whole file unparseable. A variable checked before use reads as
+               a blank to fill and fails closed. */
+            if (cmdOnly) o += `echo -e "\\n\${COLOR_BLUE}:: Step 2: Base System (stage3 tarball)\${COLOR_RESET}\\n\${COLOR_FG}Verifying and unpacking the stage3 tarball, then assembling the chroot.\\nHandbook: ${M.authority}\${COLOR_RESET}"\n`;
+            o += `mkdir -p /mnt/gentoo\ncd /mnt/gentoo\n`;
+            o += `# Pick a mirror:  ${M.stage3.mirrorList}\n`;
+            o += `# Newest tarball under:\n`;
+            o += `#   releases/amd64/autobuilds/${M.stage3.dirFor(gentooStage3)}/\n`;
+            o += `STAGE3_URL=""     # paste the full tarball URL here\n`;
+            o += `if [ -z "$STAGE3_URL" ]; then\n`;
+            o += `    echo "Set STAGE3_URL to the stage3 tarball you chose." >&2\n`;
+            o += `    exit 1\n`;
+            o += `fi\n`;
+            o += `wget "$STAGE3_URL"\n`;
+            o += `wget "$STAGE3_URL.asc"\n`;
+            /* The tarball becomes every binary on the machine, so a substituted
+               one is not a corrupted download — it is a system that belongs to
+               somebody else from first boot. */
+            o += `# Do not skip the signature: this tarball becomes every binary\n`;
+            o += `# on the machine.\n`;
+            o += `${M.stage3.keyImport}\n`;
+            o += `${M.stage3.verify('stage3-*.tar.xz')}\n`;
+            o += `${M.stage3.unpack('stage3-*.tar.xz')}\n`;
+            o += `# -p and --xattrs-include keep permissions and extended attributes,\n`;
+            o += `# --numeric-owner keeps the ids as built rather than remapping them to\n`;
+            o += `# whatever the live environment calls them.\n`;
+
+            o += `\n# Compile options, from your answers\n`;
+            o += `cat >> /mnt/gentoo/etc/portage/make.conf <<'MAKECONF'\n`;
+            o += `COMMON_FLAGS="-O2 -pipe -march=native"\n`;
+            o += `MAKEOPTS="${M.makeopts[gentooMakeopts] || M.makeopts.nproc}"\n`;
+            const gUseLine = M.useSets[gentooUse] !== undefined ? M.useSets[gentooUse] : M.useSets.profile;
+            if (gUseLine) o += `${gUseLine}\n`;
+            if (gentooBinpkgs === 'all') o += `FEATURES="getbinpkg"\n`;
+            o += `MAKECONF\n`;
+            if (gentooMakeopts === 'half') {
+                o += `# Half the cores, because a build job can want around 2 GB of RAM when\n`;
+                o += `# it links. This keeps a long build away from the OOM killer.\n`;
+            } else if (gentooMakeopts === '1') {
+                o += `# One job at a time. Slowest, and the one that always finishes.\n`;
+            }
+            o += `# -march=native builds for the CPU doing the building. Do not use it if\n`;
+            o += `# this disk will be moved to another machine.\n`;
+
+            o += `\n# The chroot, assembled by hand\n`;
+            M.chrootPrep.forEach(c => { o += `${c}\n`; });
+            o += `cp --dereference /etc/resolv.conf /mnt/gentoo/etc/\n`;
         } else {
-            o += `pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg}\n`;
+            if (cmdOnly) o += `echo -e "\\n\${COLOR_BLUE}:: Step 2: Base System Installation (pacstrap)\${COLOR_RESET}\\n\${COLOR_FG}Downloading and installing the base OS, kernel (${kernelMain}), drivers, and essential tools.\\nWiki: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages\${COLOR_RESET}"\n`;
+            if (verbosity_level === 'progress') {
+                o += `run_with_progress "pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg}" "Installing Base System"\n`;
+            } else if (verbosity_level === 'simple') {
+                o += `pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg} >/dev/null 2>&1\n`;
+            } else {
+                o += `pacstrap -K /mnt base ${allKernels} ${cpuPkg} ${gpuPkg} ${vmPkg} linux-firmware neovim ${adminTools} git ${fsPkg}\n`;
+            }
+            o += `${M.fstab}\n`;
         }
-        o += `genfstab -U /mnt >> /mnt/etc/fstab\n`;
           
-          if (isoVerify === 'yes') {
+          if (isoVerify === 'yes' && isGentoo) {
+              /* The block below is Arch's: archiso's mount point, Arch's
+                 keyring, Arch's signature file. None of it exists on a Gentoo
+                 install medium, and a verification that silently checks the
+                 wrong thing is worse than none — so the real procedure is named
+                 instead of an approximation being run. */
+              o += `\n# ==========================================\n`;
+              o += `# Live medium integrity — Gentoo\n`;
+              o += `# ==========================================\n`;
+              o += `# Gentoo publishes a .DIGESTS and a .asc beside every install image,\n`;
+              o += `# signed by the Gentoo release key. Verify the file you downloaded\n`;
+              o += `# BEFORE writing it, on the machine you downloaded it with:\n`;
+              o += `#   ${M.stage3.keyImport}\n`;
+              o += `#   gpg --verify install-amd64-minimal-*.iso.asc\n`;
+              o += `#   sha512sum -c install-amd64-minimal-*.iso.DIGESTS\n`;
+              o += `# There is no equivalent of archiso's bootmnt to check from inside a\n`;
+              o += `# running Gentoo medium, which is why this is a step you take earlier\n`;
+              o += `# rather than a command here.\n`;
+          } else if (isoVerify === 'yes') {
               o += `\n# ==========================================\n`;
               o += `# Live ISO Integrity Verifier (Ventoy/Rufus)\n`;
               o += `# ==========================================\n`;
@@ -1512,8 +1697,85 @@ run_with_progress() {
           }
 
         if (cmdOnly) {
-            o += `\ncat << 'EOF' > /mnt/chroot_script.sh\n#!/bin/bash\nexport COLOR_BLUE="\\e[38;2;122;162;247m"\nexport COLOR_RESET="\\e[0m"\n`;
+            o += `\ncat << 'EOF' > ${mntRoot}/chroot_script.sh\n#!/bin/bash\nexport COLOR_BLUE="\\e[38;2;122;162;247m"\nexport COLOR_RESET="\\e[0m"\n`;
             o += `echo -e "\${COLOR_BLUE}>> ENTERING CHROOT: Post-Install Configuration...\${COLOR_RESET}"\n`;
+
+                if (isGentoo) {
+                    /* Inside the chroot and before anything else: the profile
+                       environment, a package tree, and the profile itself. The
+                       stage3 answer decides which profile number to look for,
+                       which is why there is no separate question for it —
+                       choosing the systemd profile over an OpenRC tarball is
+                       the most common way a first Gentoo install goes wrong. */
+                    M.chrootAfter.forEach(c => { o += `${c}\n`; });
+                    o += `\n# A package tree, then the profile\n`;
+                    o += `emerge-webrsync\n`;
+                    o += `eselect profile list\n`;
+                    o += `# Pick the number matching your stage3 (${gentooStage3}), then run:\n`;
+                    o += `#   eselect profile set NUMBER\n`;
+                    o += `# The profile sets the default USE flags, the init system and the\n`;
+                    o += `# toolchain defaults.\n`;
+
+                    /* The base system, as packages rather than as a tarball
+                       transaction: everything Arch got from pacstrap that the
+                       stage3 does not already provide. Names come from the
+                       translation table, and anything Gentoo has no equivalent
+                       for is named rather than quietly dropped. */
+                    const gBase = [];
+                    if (cpuPkg) gBase.push(cpuPkg);
+                    gBase.push('linux-firmware');
+                    gBase.push(software_type === 'libre' ? 'opendoas' : 'sudo');
+                    gBase.push('cronie', 'git', 'vim');
+                    if (fs === 'btrfs') gBase.push('btrfs-progs', 'snapper');
+                    else if (fs === 'xfs') gBase.push('xfsprogs');
+                    if (part !== 'unencrypted') gBase.push('cryptsetup');
+                    if (part.includes('lvm')) gBase.push('lvm2');
+                    const gBaseMapped = pkgsOf(gBase);
+                    o += `\n# The base system beyond the stage3 tarball\n`;
+                    if (gBaseMapped.length) o += `${instNeeded(gBase)}\n`;
+                    const gMissing = window.osPkgUnavailable
+                        ? window.osPkgUnavailable(modelKey, gBase) : [];
+                    if (gMissing.length) {
+                        o += `# Not installed here, because Gentoo has no equivalent package:\n`;
+                        o += `#   ${gMissing.join(', ')}\n`;
+                        o += `# The stage3 tarball already provides the base system, and zram is\n`;
+                        o += `# configured through Gentoo's own init scripts.\n`;
+                    }
+
+                    /* The kernel, which on Gentoo is a decision rather than a
+                       package that arrives with the base system. */
+                    o += `\n# The kernel (${gentooKernel})\n`;
+                    if (gentooKernel === 'manual') {
+                        o += `${instNeeded(M.kernelPkgs.manual)}\n`;
+                        o += `cd /usr/src/linux\n`;
+                        o += `make menuconfig\n`;
+                        o += `make -j$(nproc) && make modules_install\n`;
+                        o += `make install\n`;
+                        o += `# A configuration missing the driver for your disk controller, your\n`;
+                        o += `# filesystem or dm-crypt will not boot and will not say which one\n`;
+                        o += `# is absent. Check those three before leaving menuconfig.\n`;
+                    } else if (gentooKernel === 'dist') {
+                        o += `${instNeeded(M.kernelPkgs.dist)}\n`;
+                    } else {
+                        o += `${instNeeded(M.kernelPkgs.bin)}\n`;
+                    }
+                    if (gentooBinpkgs === 'big') {
+                        o += `# Binaries for the big ones only: add --getbinpkg for the handful\n`;
+                        o += `# nobody sensibly compiles — firefox, libreoffice, chromium, rust,\n`;
+                        o += `# llvm. Chromium alone can be most of a day on a laptop.\n`;
+                    } else if (gentooBinpkgs === 'none') {
+                        o += `# Everything from source. Plan the first install as an overnight\n`;
+                        o += `# job; a desktop with a browser is the long pole by a wide margin.\n`;
+                    }
+
+                    /* fstab is written by hand here — M.fstab is null for a
+                       reason, and a skipped section would leave a system that
+                       cannot mount its own filesystems. */
+                    o += `\n# fstab, written by hand: Gentoo has no genfstab\n`;
+                    o += `blkid\n`;
+                    o += `# Write /etc/fstab yourself from the UUIDs above — root, ${M.espMount}\n`;
+                    o += `# and any swap — then read it back before you trust it.\n`;
+                }
 
                 /* Locale, time zone and console keymap.
                    These were absent from this generator entirely: no zoneinfo
@@ -1528,7 +1790,16 @@ run_with_progress() {
                 o += `sed -i 's/^#${locale}/${locale}/' /etc/locale.gen\n`;
                 o += `locale-gen\n`;
                 o += `echo "LANG=${locale}" > /etc/locale.conf\n`;
-                o += `echo "KEYMAP=${keymap}" > /etc/vconsole.conf\n`;
+                /* Where the console keymap is recorded depends on the init, not
+                   on the distribution: vconsole.conf is read by systemd, and an
+                   OpenRC system would silently ignore it. This is the keymap the
+                   disk passphrase is typed with, so a file nothing reads means a
+                   prompt that will not accept the passphrase. */
+                if (I && I.label === 'OpenRC') {
+                    o += `echo 'keymap="${keymap}"' > /etc/conf.d/keymaps\n`;
+                } else {
+                    o += `echo "KEYMAP=${keymap}" > /etc/vconsole.conf\n`;
+                }
                 if (isDual && dualboot === 'windows') {
                     o += `# Windows keeps the hardware clock in local time and expects the same\n`;
                     o += `# from Linux. hwclock --systohc above writes UTC, which is the\n`;
@@ -1570,7 +1841,7 @@ run_with_progress() {
             if (configMode === 'interactive') {
                 o += `read -p "Install JetBrains Mono & Terminal Themes? (y/N): " setup_themes\n`;
                 o += `if [[ "$setup_themes" =~ ^[Yy]$ ]]; then\n`;
-                o += `  pacman -S --noconfirm ttf-jetbrains-mono ttf-jetbrains-mono-nerd\n`;
+                o += `  ${inst(['ttf-jetbrains-mono', 'ttf-jetbrains-mono-nerd'])}\n`;
                 o += `  echo "Available Themes: 1) Tokyo Night  2) Dracula  3) Gruvbox  4) Nordic"\n`;
                 o += `  read -p "Select Theme (1-4): " theme_sel\n`;
                 o += `  case "$theme_sel" in\n`;
@@ -1584,13 +1855,13 @@ run_with_progress() {
                 o += `fi\n`;
             } else {
                 o += `\n# Install JetBrains Mono & Theme (Pre-configured)\n`;
-                o += `pacman -S --noconfirm ttf-jetbrains-mono ttf-jetbrains-mono-nerd\n`;
+                o += `${inst(['ttf-jetbrains-mono', 'ttf-jetbrains-mono-nerd'])}\n`;
                 o += `THEME="${advThemeMode}"\n`;
                 o += `echo "Theme $THEME selected (Configuration will be applied via dotfiles / user bashrc)"\n`;
             }
 
         } else {
-            o += `arch-chroot /mnt\n`;
+            o += `${M.chroot}\n`;
         }
 
         if (software_type === "libre") o += `echo "permit persist :wheel" > /etc/doas.conf\nln -s /usr/bin/doas /usr/bin/sudo\n`;
@@ -1599,19 +1870,57 @@ run_with_progress() {
         if (!cmdOnly) o += `\`\`\`\n\n## 3. Initramfs\n\`\`\`bash\n`;
         else o += `\n# 3. Initramfs\n`;
 
-        let baseHooks = initSys === "systemd" ? "base systemd autodetect microcode modconf kms keyboard sd-vconsole block" : "base udev autodetect microcode modconf kms keyboard keymap consolefont block";
-        let cryptoHook = part !== "unencrypted" ? (initSys === "systemd" ? "sd-encrypt" : "encrypt") : "";
-        let lvmHook = part.includes("lvm") ? "lvm2" : "";
-        let fsHook = fs === "btrfs" ? "btrfs filesystems fsck" : "filesystems fsck";
-        let hooks = [baseHooks, cryptoHook, lvmHook, fsHook].filter(h => h).join(" ");
-        o += `sed -i 's/^HOOKS=.*/HOOKS=(${hooks})/' /etc/mkinitcpio.conf\nmkinitcpio -P\n`;
+        /* `M.initramfs === null` is an answer, not a gap: the system has no
+           such command and the step has to be written out instead. On Gentoo
+           the initramfs comes from dracut, pulled in by installkernel's USE
+           flag, and it is rebuilt whenever a kernel is installed — so there is
+           nothing to run by hand, and what does need saying is which modules to
+           name when the root volume is encrypted. */
+        if (M.initramfs === null && isGentoo) {
+            o += `# Gentoo has no mkinitcpio. The initramfs comes from dracut, pulled in\n`;
+            o += `# through sys-kernel/installkernel with its dracut USE flag, and it is\n`;
+            o += `# rebuilt automatically whenever a kernel is installed.\n`;
+            M.dracut.enable.forEach(c => { o += `${c}\n`; });
+            if (part !== "unencrypted") {
+                o += `mkdir -p /etc/dracut.conf.d\n`;
+                o += `cat > /etc/dracut.conf.d/luks.conf << 'DRACUT'\n`;
+                o += `${M.dracut.cryptModules}\n`;
+                o += `DRACUT\n`;
+                o += `# Dracut usually detects an encrypted root on its own, but only if it\n`;
+                o += `# can see the running configuration while it builds. Naming the\n`;
+                o += `# modules makes it independent of that; the failure it prevents is an\n`;
+                o += `# initramfs that cannot open the root volume, which you find out\n`;
+                o += `# about at the first reboot and not before.\n`;
+            }
+        } else {
+            let baseHooks = initSys === "systemd" ? "base systemd autodetect microcode modconf kms keyboard sd-vconsole block" : "base udev autodetect microcode modconf kms keyboard keymap consolefont block";
+            let cryptoHook = part !== "unencrypted" ? (initSys === "systemd" ? "sd-encrypt" : "encrypt") : "";
+            let lvmHook = part.includes("lvm") ? "lvm2" : "";
+            let fsHook = fs === "btrfs" ? "btrfs filesystems fsck" : "filesystems fsck";
+            let hooks = [baseHooks, cryptoHook, lvmHook, fsHook].filter(h => h).join(" ");
+            o += `sed -i 's/^HOOKS=.*/HOOKS=(${hooks})/' /etc/mkinitcpio.conf\n${M.initramfs}\n`;
+        }
 
         if (!cmdOnly) o += `\`\`\`\n\n## 4. Bootloader (${boot})\n\`\`\`bash\n`;
         else o += `\n# 4. Bootloader\n`;
 
         if (fw === "bios" || boot.includes("grub")) {
-            o += `pacman -S --noconfirm grub efibootmgr\n`;
-            o += fw === "uefi" ? `grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB\n` : `grub-install --target=i386-pc ${disk}\n`;
+            /* GRUB_PLATFORMS has to be set before GRUB is built on Gentoo, not
+               after: the package compiles for whichever platform is configured
+               at merge time, and grub-install then refuses with an error that
+               does not obviously point back here. */
+            if (isGentoo) {
+                o += `echo 'GRUB_PLATFORMS="${fw === "uefi" ? 'efi-64' : 'pc'}"' >> /etc/portage/make.conf\n`;
+                o += `${inst(['grub'])}\n`;
+                if (fw === "uefi") o += `${inst(['efibootmgr'])}\n`;
+            } else {
+                o += `pacman -S --noconfirm grub efibootmgr\n`;
+            }
+            o += fw === "uefi"
+                ? (isGentoo
+                    ? `grub-install --efi-directory=${M.espMount}\n`
+                    : `grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB\n`)
+                : `grub-install --target=i386-pc ${disk}\n`;
             if (part !== "unencrypted") {
                 o += `LUKS_UUID=$(blkid -s UUID -o value ${partRoot})\n`;
                 o += `sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\"cryptdevice=UUID=$LUKS_UUID:cryptroot root=/dev/mapper/cryptroot\\"|" /etc/default/grub\n`;
@@ -1620,8 +1929,35 @@ run_with_progress() {
             o += `grub-mkconfig -o /boot/grub/grub.cfg\n`;
         } else if (boot.includes("uki")) {
             if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Unified Kernel Image (UKI)\${COLOR_RESET}\n\${COLOR_FG}A UKI bundles the kernel, initramfs, and cmdline into a single EFI file. Extremely secure, built for Secure Boot.\nWiki: https://wiki.archlinux.org/title/Unified_kernel_image\${COLOR_RESET}"\n`;
-            o += `pacman -S --noconfirm sbsigntools efitools efibootmgr\n`;
-            if (boot === "uki-shim") o += `pacman -S --noconfirm shim-signed\ncp /usr/share/shim-signed/shimx64.efi /efi/EFI/arch/bootx64.efi\n`;
+            if (isGentoo) {
+                o += `${inst(['sbsigntools', 'efitools', 'efibootmgr'])}\n`;
+                /* Gentoo builds a unified image through dracut rather than a
+                   mkinitcpio preset. `uefi="yes"` is what makes it one bundled
+                   executable instead of a kernel and an initramfs. */
+                o += `mkdir -p /etc/dracut.conf.d\n`;
+                o += `echo 'uefi="yes"' >> /etc/dracut.conf.d/uki.conf\n`;
+                if (gentooKernel === 'manual') {
+                    o += `# A hand-built kernel gets its unified image from installkernel on the\n`;
+                    o += `# next 'make install'; there is no package to reconfigure.\n`;
+                } else {
+                    o += `emerge --config ${(M.kernelPkgs[gentooKernel] || M.kernelPkgs.bin)[0]}   # rebuilds the image\n`;
+                }
+            } else {
+                o += `pacman -S --noconfirm sbsigntools efitools efibootmgr\n`;
+            }
+            if (boot === "uki-shim") {
+                if (isGentoo) {
+                    /* shim is distributed as a signed binary by its vendor, so
+                       there is no ebuild to point at. Saying where it comes from
+                       beats emitting a package name that does not resolve. */
+                    o += `# shim-signed has no Gentoo package: it is a vendor-signed binary.\n`;
+                    o += `# Take shimx64.efi from a distribution that ships it, or build and\n`;
+                    o += `# sign your own, then:\n`;
+                    o += `#   cp shimx64.efi ${M.espMount}/EFI/gentoo/bootx64.efi\n`;
+                } else {
+                    o += `pacman -S --noconfirm shim-signed\ncp /usr/share/shim-signed/shimx64.efi /efi/EFI/arch/bootx64.efi\n`;
+                }
+            }
         } else if (boot === "systemd-boot") {
             if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Installing systemd-boot\${COLOR_RESET}\n\${COLOR_FG}systemd-boot is a minimalist, fast bootloader for UEFI systems.\nWiki: https://wiki.archlinux.org/title/Systemd-boot\${COLOR_RESET}"\n`;
             o += `bootctl install --esp-path=/efi\n`;
@@ -1630,10 +1966,20 @@ run_with_progress() {
         if (!cmdOnly) o += `\`\`\`\n\n## 5. DNS (${dns})\n\`\`\`bash\n`;
         else o += `\n# 5. DNS\n`;
 
-        if (dns === "unbound") o += `pacman -S --noconfirm unbound\nsystemctl enable unbound\n`;
-        else if (dns === "dnscrypt-proxy") o += `pacman -S --noconfirm dnscrypt-proxy\nsystemctl enable dnscrypt-proxy\n`;
-        else if (dns === "bind") o += `pacman -S --noconfirm bind\nsystemctl enable named\n`;
-        else if (dns === "dnsmasq") o += `pacman -S --noconfirm dnsmasq\nsystemctl enable dnsmasq\n`;
+        /* The daemon is a package and a service, both of which differ by system
+           and by init. systemd-resolved is the exception: it is part of systemd,
+           so on an OpenRC machine there is nothing to enable and the fallback
+           has to be a resolver that exists there. */
+        if (dns === "unbound") o += `${inst(['unbound'])}\n${svc('unbound')}\n`;
+        else if (dns === "dnscrypt-proxy") o += `${inst(['dnscrypt-proxy'])}\n${svc('dnscrypt-proxy')}\n`;
+        else if (dns === "bind") o += `${inst(['bind'])}\n${svc('named')}\n`;
+        else if (dns === "dnsmasq") o += `${inst(['dnsmasq'])}\n${svc('dnsmasq')}\n`;
+        else if (openrc) {
+            o += `# systemd-resolved is part of systemd and does not exist here. Stubby\n`;
+            o += `# is the OpenRC equivalent: a local stub resolver that forwards over\n`;
+            o += `# TLS. It is configured below.\n`;
+            o += `${inst(['stubby'])}\n${svc('stubby')}\n`;
+        }
         else o += `systemctl enable systemd-resolved\n`;
 
         /* Encrypted DNS. This whole block did not exist: the generator picked a
@@ -1651,13 +1997,29 @@ run_with_progress() {
             const dnsMode = gv('dns_ipv4_only', 'no') === 'yes' ? 'ipv4' : 'both';
             o += `\n# Encrypted DNS — ${dnsProv.label}, DNS-over-TLS with the\n`;
             o += `# certificate name pinned, plus DNSSEC.\n`;
-            o += `mkdir -p /etc/systemd/resolved.conf.d\n`;
-            o += `cat > /etc/systemd/resolved.conf.d/dns.conf << 'DNSCONF'\n`;
-            window.DnsProviders.buildResolvedConf(dnsProv, dnsMode)
-                .forEach(line => { o += `${line}\n`; });
-            o += `DNSCONF\n`;
-            o += `systemctl enable systemd-resolved\n`;
-            o += `ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf\n`;
+            /* Writing a resolved drop-in on a machine with no resolved is
+               encrypted DNS that is configured, looks configured and never runs
+               — the defect class this repository exists to remove. Stubby is
+               the daemon that does the same job under OpenRC, and tls_auth_name
+               is its spelling of the certificate pin. */
+            if (openrc) {
+                o += `mkdir -p /etc/stubby\n`;
+                o += `cat > /etc/stubby/stubby.yml << 'DNSCONF'\n`;
+                window.DnsProviders.buildStubbyConf(dnsProv, dnsMode)
+                    .forEach(line => { o += `${line}\n`; });
+                o += `DNSCONF\n`;
+                o += `${svc('stubby')}\n`;
+                o += `printf 'nameserver 127.0.0.1\\noptions edns0\\n' > /etc/resolv.conf\n`;
+                o += `chattr +i /etc/resolv.conf   # stop DHCP replacing it\n`;
+            } else {
+                o += `mkdir -p /etc/systemd/resolved.conf.d\n`;
+                o += `cat > /etc/systemd/resolved.conf.d/dns.conf << 'DNSCONF'\n`;
+                window.DnsProviders.buildResolvedConf(dnsProv, dnsMode)
+                    .forEach(line => { o += `${line}\n`; });
+                o += `DNSCONF\n`;
+                o += `systemctl enable systemd-resolved\n`;
+                o += `ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf\n`;
+            }
             if (dnsMode === 'ipv4') {
                 o += `# IPv4 only: a v6 resolver on a network without working v6 does not\n`;
                 o += `# fail cleanly — lookups go intermittent, which reads as broken DNS.\n`;
@@ -1668,10 +2030,21 @@ run_with_progress() {
                 o += `\n# NetworkManager overwrites resolv.conf from DHCP otherwise, which\n`;
                 o += `# silently undoes the above on the next connection.\n`;
                 o += `mkdir -p /etc/NetworkManager/conf.d\n`;
-                o += `printf '[main]\\ndns=systemd-resolved\\n' > /etc/NetworkManager/conf.d/dns.conf\n`;
+                if (openrc) {
+                    o += `printf '[main]\\ndns=none\\n' > /etc/NetworkManager/conf.d/dns.conf\n`;
+                    o += `# dns=none rather than systemd-resolved, which is not running here:\n`;
+                    o += `# it leaves the resolv.conf written above alone.\n`;
+                } else {
+                    o += `printf '[main]\\ndns=systemd-resolved\\n' > /etc/NetworkManager/conf.d/dns.conf\n`;
+                }
             }
-            o += `echo "Verify after boot: resolvectl status should show DNSOverTLS: yes"\n`;
-            o += `echo "and each server as <address>#${dnsProv.tls}"\n`;
+            if (openrc) {
+                o += `echo "Verify after boot: stubby -i should parse the config, and"\n`;
+                o += `echo "dig @127.0.0.1 example.com should answer through ${dnsProv.tls}"\n`;
+            } else {
+                o += `echo "Verify after boot: resolvectl status should show DNSOverTLS: yes"\n`;
+                o += `echo "and each server as <address>#${dnsProv.tls}"\n`;
+            }
         }
 
         if (!cmdOnly) o += `\`\`\`\n\n## 6. Desktop & Apps\n\`\`\`bash\n`;
@@ -1679,37 +2052,87 @@ run_with_progress() {
         
         o += `\n### POST-INSTALL BOUNDARY ###\n`;
 
-        // AUR
+        /* The AUR is Arch's, and `M.aur` is what says so. A system without one
+           gets no build user, no helper and no clone — and the packages the AUR
+           would have supplied are looked up in that system's own repositories
+           below, or named as unavailable there. */
         const needsAUR = post_apps.length > 0 || desktop === "dusky";
-        if (needsAUR) {
+        if (needsAUR && M.aur) {
             o += `pacman -S --noconfirm git base-devel\nuseradd -m -G wheel -s /bin/bash builder\necho "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/builder\n`;
             o += `su - builder -c "git clone https://aur.archlinux.org/paru.git /tmp/paru && cd /tmp/paru && makepkg -si --noconfirm"\n`;
         }
 
-        // Apps
+        /* Apps, as lists of Arch package names. Lists rather than strings so
+           each name can be translated for the target system; joined back with a
+           space, Arch's command is the string it always was. */
         const aurApps = ['librewolf','signal','tor-browser','vscodium','timeshift','ungoogled-chromium'];
         const pacApps = {
-            firefox:'firefox', neovim:'neovim git ripgrep fd', alacritty:'alacritty',
-            zsh:'zsh zsh-completions', thunar:'thunar gvfs thunar-volman', mpv:'mpv',
-            obs:'obs-studio', keepassxc:'keepassxc', flatpak:'flatpak',
-            chromium:'chromium', kitty:'kitty', git:'git', tmux:'tmux', htop:'htop',
-            nautilus:'nautilus', vlc:'vlc', gimp:'gimp', libreoffice:'libreoffice-fresh',
-            networkmanager:'networkmanager', bluetooth:'bluez bluez-utils',
-            pipewire:'pipewire pipewire-pulse pipewire-alsa wireplumber',
-            clamav:'clamav', firejail:'firejail', doas:'opendoas',
-            openssh:'openssh', snapper:'snapper snap-pac grub-btrfs',
-            pfetch:'pfetch', fastfetch:'fastfetch',
+            firefox:['firefox'], neovim:['neovim','git','ripgrep','fd'], alacritty:['alacritty'],
+            zsh:['zsh','zsh-completions'], thunar:['thunar','gvfs','thunar-volman'], mpv:['mpv'],
+            obs:['obs-studio'], keepassxc:['keepassxc'], flatpak:['flatpak'],
+            chromium:['chromium'], kitty:['kitty'], git:['git'], tmux:['tmux'], htop:['htop'],
+            nautilus:['nautilus'], vlc:['vlc'], gimp:['gimp'], libreoffice:['libreoffice-fresh'],
+            networkmanager:['networkmanager'], bluetooth:['bluez','bluez-utils'],
+            pipewire:['pipewire','pipewire-pulse','pipewire-alsa','wireplumber'],
+            clamav:['clamav'], firejail:['firejail'], doas:['opendoas'],
+            openssh:['openssh'], snapper:['snapper','snap-pac','grub-btrfs'],
+            pfetch:['pfetch'], fastfetch:['fastfetch'],
         };
+        /* The AUR name each of these has, where it differs from the option id.
+           Also the name looked up in another system's repositories. */
+        const aurPkgName = { signal: 'signal-desktop', 'ungoogled-chromium': 'ungoogled-chromium-bin' };
+        let overlaysNeeded = [];
         post_apps.forEach(app => {
             if (app === 'paru') return; // already installed
             if (aurApps.includes(app)) {
-                let pkg = app;
-                if (app === 'signal') pkg = 'signal-desktop';
-                if (app === 'ungoogled-chromium') pkg = 'ungoogled-chromium-bin';
-                o += `su - builder -c "paru -S --noconfirm ${pkg}"\n`;
+                if (M.aur) {
+                    let pkg = aurPkgName[app] || app;
+                    o += `su - builder -c "paru -S --noconfirm ${pkg}"\n`;
+                    return;
+                }
+                /* No AUR here. Three outcomes, and the guide has to distinguish
+                   them: the package is in this system's own repositories, it is
+                   in an overlay that has to be enabled first, or it is not
+                   packaged at all. Emitting an install command for the last two
+                   produces a script that stops with an error a reader has no way
+                   to interpret. */
+                const over = window.osPkgOverlay ? window.osPkgOverlay(modelKey, app) : null;
+                if (over) {
+                    overlaysNeeded.push(over);
+                    o += `emerge --verbose ${over.atom}\n`;
+                    return;
+                }
+                const mapped = pkgOf(app === 'signal' ? 'signal-desktop' : app);
+                if (mapped) o += `${inst([app === 'signal' ? 'signal-desktop' : app])}\n`;
+                else o += `# ${app}: no ${osLabel} package and no overlay carrying it.\n`;
+                return;
             }
-            else if (pacApps[app]) o += `pacman -S --noconfirm ${pacApps[app]}\n`;
+            if (!pacApps[app]) return;
+            const mapped = pkgsOf(pacApps[app]);
+            if (mapped.length) o += `${inst(pacApps[app])}\n`;
+            const gone = window.osPkgUnavailable ? window.osPkgUnavailable(modelKey, pacApps[app]) : [];
+            if (gone.length) {
+                o += `# Not a separate package on ${osLabel}: ${gone.join(', ')}.\n`;
+            }
         });
+        /* One block, before the packages that need it, rather than repeated per
+           app: adding the same overlay twice is an error, not a no-op. */
+        if (overlaysNeeded.length) {
+            const seen = [];
+            const pre = [];
+            overlaysNeeded.forEach(v => {
+                if (seen.indexOf(v.repo) !== -1) return;
+                seen.push(v.repo);
+                pre.push(`# ${v.repo} is ${v.note}, not part of the main tree.\n`);
+                pre.push(`emerge --verbose --noreplace app-eselect/eselect-repository\n`);
+                pre.push(`eselect repository enable ${v.repo}\n`);
+                pre.push(`emerge --sync ${v.repo}\n`);
+            });
+            /* Inserted ahead of the emerge lines that depend on it. */
+            const at = o.lastIndexOf('### POST-INSTALL BOUNDARY ###\n');
+            const cut = at + '### POST-INSTALL BOUNDARY ###\n'.length;
+            o = o.slice(0, cut) + pre.join('') + o.slice(cut);
+        }
         // Packages the user typed in themselves. Checked on the machine, where
         // the real package database is, and warned about rather than aborted:
         // a name this browser could not verify may be perfectly valid, and a
@@ -1721,26 +2144,50 @@ run_with_progress() {
         if (extraPkgs.length) {
             o += `\n# Your own packages. Verified here, not in the browser.\n`;
             o += `for pkg in ${extraPkgs.join(' ')}; do\n`;
-            o += `    if pacman -Si "$pkg" >/dev/null 2>&1; then\n`;
-            o += `        pacman -S --needed --noconfirm "$pkg"\n`;
-            o += `    elif su - builder -c "paru -Si '$pkg'" >/dev/null 2>&1; then\n`;
-            o += `        su - builder -c "paru -S --needed --noconfirm '$pkg'"\n`;
-            o += `    else\n`;
-            o += `        echo "WARNING: '$pkg' is in neither the official repos nor the AUR." >&2\n`;
-            o += `        echo "  Official: https://archlinux.org/packages/?q=$pkg" >&2\n`;
-            o += `        echo "  AUR:      https://aur.archlinux.org/packages?K=$pkg" >&2\n`;
-            o += `        echo "  It may have been renamed or dropped. Skipping this one." >&2\n`;
-            o += `    fi\n`;
+            if (isGentoo) {
+                /* --pretend resolves the atom without merging anything, so an
+                   unknown name is caught before the build starts rather than
+                   after it has spent an hour on a dependency. */
+                o += `    if emerge --pretend --quiet "$pkg" >/dev/null 2>&1; then\n`;
+                o += `        ${M.install(['"$pkg"'])}\n`;
+                o += `    else\n`;
+                o += `        echo "WARNING: '$pkg' is not in the Portage tree." >&2\n`;
+                o += `        echo "  Search:  https://packages.gentoo.org/packages/search?q=$pkg" >&2\n`;
+                o += `        echo "  It may live in an overlay, or be named differently here." >&2\n`;
+                o += `    fi\n`;
+            } else {
+                o += `    if pacman -Si "$pkg" >/dev/null 2>&1; then\n`;
+                o += `        pacman -S --needed --noconfirm "$pkg"\n`;
+                o += `    elif su - builder -c "paru -Si '$pkg'" >/dev/null 2>&1; then\n`;
+                o += `        su - builder -c "paru -S --needed --noconfirm '$pkg'"\n`;
+                o += `    else\n`;
+                o += `        echo "WARNING: '$pkg' is in neither the official repos nor the AUR." >&2\n`;
+                o += `        echo "  Official: https://archlinux.org/packages/?q=$pkg" >&2\n`;
+                o += `        echo "  AUR:      https://aur.archlinux.org/packages?K=$pkg" >&2\n`;
+                o += `        echo "  It may have been renamed or dropped. Skipping this one." >&2\n`;
+                o += `    fi\n`;
+            }
             o += `done\n`;
         }
 
         // Post-install service enables & extra setup
         if (post_apps.includes('flatpak')) o += `flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo\n`;
         if (post_apps.includes('zsh')) o += `chsh -s /bin/zsh\n`;
-        if (post_apps.includes('networkmanager')) o += `systemctl enable --now NetworkManager\n`;
-        if (post_apps.includes('bluetooth')) o += `systemctl enable --now bluetooth\n`;
-        if (post_apps.includes('pipewire')) o += `systemctl --user enable --now pipewire pipewire-pulse wireplumber\n`;
-        if (post_apps.includes('clamav')) o += `freshclam\nsystemctl enable --now clamav-freshclam\n`;
+        if (post_apps.includes('networkmanager')) o += `${svcNow('NetworkManager')}\n`;
+        if (post_apps.includes('bluetooth')) o += `${svcNow('bluetooth')}\n`;
+        if (post_apps.includes('pipewire')) {
+            /* A per-user service under systemd; under OpenRC there is no user
+               session manager, so it is started from the desktop session
+               instead and there is nothing to enable at the system level. */
+            if (openrc) {
+                o += `# PipeWire runs per user. OpenRC has no user session manager, so start\n`;
+                o += `# it from your desktop session — most compositors do this already, and\n`;
+                o += `# elogind provides the seat it needs.\n`;
+            } else {
+                o += `systemctl --user enable --now pipewire pipewire-pulse wireplumber\n`;
+            }
+        }
+        if (post_apps.includes('clamav')) o += `freshclam\n${svcNow('clamav-freshclam')}\n`;
         
         if (post_apps.includes('doas')) {
             o += `\n# Configure Doas\n`;
@@ -1758,7 +2205,7 @@ run_with_progress() {
                 o += `  read -p "Do you want to fully replace Sudo with a Doas Wrapper? (y/n): " ans\n`;
                 o += `  if [[ "$ans" =~ ^[Yy]$ ]]; then\n`;
                 o += `    echo "Fully replacing sudo..."\n`;
-                o += `    pacman -Rdd --noconfirm sudo || true\n`;
+                o += `    ${M.removeNoDeps(['sudo'])} || true\n`;
                 o += `    cat << 'EOF' > /usr/local/bin/sudo\n#!/bin/bash\n# Doas Wrapper script\nargs=()\nfor arg in "$@"; do\n  if [[ "$arg" == "-E" ]]; then continue; fi\n  if [[ "$arg" == "-i" ]]; then args+=("-s"); continue; fi\n  if [[ "$arg" == "-v" ]]; then doas -C /etc/doas.conf; exit $?; fi\n  args+=("$arg")\ndone\nexec /usr/bin/doas "\${args[@]}"\nEOF\n`;
                 o += `    chmod +x /usr/local/bin/sudo\n`;
                 o += `    ln -sf /usr/local/bin/sudo /usr/bin/sudo\n`;
@@ -1770,13 +2217,13 @@ run_with_progress() {
             } else {
                 if (advDoasMode === 'replace') {
                     o += `\n# Fully Replace Sudo with Doas Wrapper (Pre-configured)\n`;
-                    o += `pacman -Rdd --noconfirm sudo || true\n`;
+                    o += `${M.removeNoDeps(['sudo'])} || true\n`;
                     o += `cat << 'EOF' > /usr/local/bin/sudo\n#!/bin/bash\n# Doas Wrapper script\nargs=()\nfor arg in "$@"; do\n  if [[ "$arg" == "-E" ]]; then continue; fi\n  if [[ "$arg" == "-i" ]]; then args+=("-s"); continue; fi\n  if [[ "$arg" == "-v" ]]; then doas -C /etc/doas.conf; exit $?; fi\n  args+=("$arg")\ndone\nexec /usr/bin/doas "\${args[@]}"\nEOF\n`;
                     o += `chmod +x /usr/local/bin/sudo\n`;
                     o += `ln -sf /usr/local/bin/sudo /usr/bin/sudo\n`;
                 } else if (advDoasMode === 'remove') {
                     o += `\n# Remove Sudo entirely (Pre-configured)\n`;
-                    o += `pacman -Rdd --noconfirm sudo || true\n`;
+                    o += `${M.removeNoDeps(['sudo'])} || true\n`;
                 }
             }
         }
@@ -1787,22 +2234,55 @@ run_with_progress() {
         // grouped with dwm here, so choosing Dusky on "Auto" emitted an Xorg
         // install for a compositor that cannot use one. dwm is the Xorg case.
         const dsXorg = (displayServer === "auto" && desktop === "dwm") || displayServer === "xorg";
-        if (desktop === "gnome") { o += `pacman -S --noconfirm gnome gnome-tweaks ${dsXorg ? 'xorg-server' : 'wayland'}\nsystemctl enable gdm\n`; }
-        else if (desktop === "kde") { o += `pacman -S --noconfirm plasma-desktop sddm ${dsXorg ? 'xorg-server' : 'wayland'}\nsystemctl enable sddm\n`; }
-        else if (desktop === "dwm") { o += `pacman -S --noconfirm xorg-server xorg-xinit base-devel libx11 libxinerama libxft\ngit clone https://git.suckless.org/dwm /usr/local/src/dwm && cd /usr/local/src/dwm && make install\n`; }
+        if (desktop === "gnome") { o += `${inst(['gnome', 'gnome-tweaks', dsXorg ? 'xorg-server' : 'wayland'])}\n${svc('gdm')}\n`; }
+        else if (desktop === "kde") { o += `${inst(['plasma-desktop', 'sddm', dsXorg ? 'xorg-server' : 'wayland'])}\n${svc('sddm')}\n`; }
+        else if (desktop === "dwm") { o += `${inst(['xorg-server', 'xorg-xinit', 'base-devel', 'libx11', 'libxinerama', 'libxft'])}\ngit clone https://git.suckless.org/dwm /usr/local/src/dwm && cd /usr/local/src/dwm && make install\n`; }
         else if (desktop === "dusky") {
             // Not conditional on dsXorg: Dusky's own install.sh pulls Hyprland,
             // Waybar, Rofi, Swaync, Wlogout and SDDM. All that is needed first
             // is a Wayland base plus Xwayland for legacy X clients.
-            o += `pacman -S --noconfirm git base-devel wayland xorg-xwayland\n`;
-            o += software_type === "libre"
-                ? `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && sed -i 's/sudo/doas/g' install.sh && ./install.sh"\n`
-                : `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && ./install.sh"\n`;
+            o += `${inst(['git', 'base-devel', 'wayland', 'xorg-xwayland'])}\n`;
+            /* Dusky's installer is written against Arch and calls pacman and an
+               AUR helper directly. On a source-based system it has to be built
+               through that system's own package manager instead — keyed on
+               whether the system compiles rather than on its name, because that
+               is the property that decides it. */
+            if (M.kernel && M.kernel.compiled) {
+                o += `# Dusky's own install.sh is written against Arch: it calls pacman and\n`;
+                o += `# an AUR helper, neither of which exists here. Build its components\n`;
+                o += `# through Portage, then take the dotfiles from the repository.\n`;
+                o += `${inst(['hyprland', 'waybar', 'rofi', 'sddm'])}\n`;
+                o += `${svc('sddm')}\n`;
+                o += `# swaync and wlogout are not in the main tree. Enable GURU for them:\n`;
+                o += `#   emerge --verbose --noreplace app-eselect/eselect-repository\n`;
+                o += `#   eselect repository enable guru && emerge --sync guru\n`;
+                o += `git clone https://github.com/dusklinux/dusky.git /tmp/dusky\n`;
+                o += `# Copy the configuration from /tmp/dusky/config into ~/.config by hand;\n`;
+                o += `# do not run its install.sh, which would call pacman.\n`;
+            } else {
+                o += software_type === "libre"
+                    ? `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && sed -i 's/sudo/doas/g' install.sh && ./install.sh"\n`
+                    : `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && ./install.sh"\n`;
+            }
         }
 
         // Browser (from browser dropdown, separate from post_apps)
-        if (browser === "librewolf") o += `su - builder -c "paru -S --noconfirm librewolf"\n`;
-        else if (browser === "firefox") o += `pacman -S --noconfirm firefox\n`;
+        if (browser === "librewolf") {
+            if (M.aur) o += `su - builder -c "paru -S --noconfirm librewolf"\n`;
+            else {
+                const lw = window.osPkgOverlay ? window.osPkgOverlay(modelKey, 'librewolf') : null;
+                if (lw) {
+                    o += `# ${lw.repo} is ${lw.note}, not part of the main tree.\n`;
+                    o += `emerge --verbose --noreplace app-eselect/eselect-repository\n`;
+                    o += `eselect repository enable ${lw.repo}\n`;
+                    o += `emerge --sync ${lw.repo}\n`;
+                    o += `emerge --verbose ${lw.atom}\n`;
+                } else {
+                    o += `# librewolf: no ${osLabel} package and no overlay carrying it.\n`;
+                }
+            }
+        }
+        else if (browser === "firefox") o += `${inst(['firefox'])}\n`;
 
 
 
@@ -1830,7 +2310,7 @@ run_with_progress() {
             o += `ssh-keygen -t ed25519 -f "$USER_SSH_DIR/id_ed25519" -C "$NEWUSER@arch" -N ""\n`;
             o += `cat "$USER_SSH_DIR/id_ed25519.pub" >> "$USER_SSH_DIR/authorized_keys"\n`;
             o += `chmod 600 "$USER_SSH_DIR/authorized_keys"\nchown -R "$NEWUSER:$NEWUSER" "$USER_SSH_DIR"\n`;
-            o += `systemctl enable sshd.service\n`;
+            o += `${svc(openrc ? 'sshd' : 'sshd.service')}\n`;
             o += `echo "# SSH private key saved: $USER_SSH_DIR/id_ed25519"\n`;
             o += `echo "# Copy id_ed25519 to your client machine before rebooting!"\n`;
             if (!cmdOnly) o += `\`\`\`\n\n> ⚠️ **Save your SSH private key** (\`~/.ssh/id_ed25519\`) to your client machine before rebooting. Password auth is disabled.\n\n`;
@@ -1851,24 +2331,24 @@ run_with_progress() {
                 o += `  read -p "Do you want to enable automatic hourly/daily timeline snapshots? (y/n): " ans\n`;
                 o += `  if [[ "$ans" =~ ^[Yy]$ ]]; then\n`;
                 o += `    echo "Enabling timeline snapshots..."\n`;
-                o += `    systemctl enable --now snapper-timeline.timer snapper-cleanup.timer\n`;
+                o += `    ${snapperTimeline()}\n`;
                 o += `  else\n`;
-                o += `    echo "Timeline disabled. Pre/Post pacman snapshots only."\n`;
+                o += `    echo "Timeline disabled. ${isGentoo ? 'Manual snapshots only.' : 'Pre/Post pacman snapshots only.'}"\n`;
                 o += `  fi\n`;
                 o += `}\n`;
                 o += `snapper_prompt\n`;
             } else {
                 if (advSnapperMode === 'timeline') {
-                    o += `systemctl enable --now snapper-timeline.timer snapper-cleanup.timer\n`;
+                    o += `${snapperTimeline()}\n`;
                 } else {
                     o += `# Timeline snapshots disabled by user selection.\n`;
                 }
             }
 
             o += `# Install grub-btrfs for rollback menu\n`;
-            o += `systemctl enable --now grub-btrfsd.service\n`;
+            o += `${svcNow(openrc ? 'grub-btrfsd' : 'grub-btrfsd.service')}\n`;
         } else if (fs === "btrfs") {
-            o += `snapper -c root create-config /\nsystemctl enable snapper-timeline.timer snapper-cleanup.timer\n`;
+            o += `snapper -c root create-config /\n${snapperTimeline(false)}\n`;
         }
 
         // pfetch / fastfetch shell greeting
@@ -1911,14 +2391,28 @@ run_with_progress() {
         if (desktop === 'dusky') {
             if (!cmdOnly) o += `\n### Dusky Auto-Setup\n> Watch the [YouTube guide](https://www.youtube.com/watch?v=JmgvSdEIK8c) and read the [dusky repo](https://github.com/dusklinux/dusky) cheatsheet before running.\n\n\`\`\`bash\n`;
             else o += `\n# Dusky Auto-Setup (by dusklinux)\n# Watch: https://www.youtube.com/watch?v=JmgvSdEIK8c\n# Repo:  https://github.com/dusklinux/dusky\n`;
-            o += `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && ./install.sh"\n`;
+            if (M.aur) {
+                o += `su - builder -c "git clone https://github.com/dusklinux/dusky.git /tmp/dusky && cd /tmp/dusky && ./install.sh"\n`;
+            } else {
+                /* install.sh calls pacman and an AUR helper directly. Running it
+                   on a system with neither does not fail early and cleanly — it
+                   gets partway through and leaves a half-configured desktop. */
+                o += `git clone https://github.com/dusklinux/dusky.git /tmp/dusky\n`;
+                o += `# Do not run install.sh here: it calls pacman and an AUR helper, and\n`;
+                o += `# neither exists on ${osLabel}. The components were installed above;\n`;
+                o += `# copy the configuration from /tmp/dusky into ~/.config yourself.\n`;
+            }
             if (!cmdOnly) o += `\`\`\`\n\n> 📋 **Cheatsheet**: \`/tmp/dusky/cheatsheet.md\` — Hyprland keybinds and workflow\n`;
         }
 
-        if (vm_guest === "vbox") o += `systemctl enable vboxservice.service\n`;
-        else if (vm_guest === "vmware") o += `systemctl enable vmtoolsd.service\n`;
-        else if (vm_guest === "qemu") o += `systemctl enable qemu-guest-agent.service\n`;
-        if (needsAUR) o += `userdel -r builder\nrm -f /etc/sudoers.d/builder\n`;
+        /* OpenRC init scripts have no `.service` suffix, so the unit name is
+           written without one there. Passing the systemd spelling to
+           `rc-update` produces a script name that does not exist and an enable
+           that silently does nothing. */
+        if (vm_guest === "vbox") o += `${svc(openrc ? 'virtualbox-guest-additions' : 'vboxservice.service')}\n`;
+        else if (vm_guest === "vmware") o += `${svc(openrc ? 'vmtoolsd' : 'vmtoolsd.service')}\n`;
+        else if (vm_guest === "qemu") o += `${svc(openrc ? 'qemu-guest-agent' : 'qemu-guest-agent.service')}\n`;
+        if (needsAUR && M.aur) o += `userdel -r builder\nrm -f /etc/sudoers.d/builder\n`;
 
         // ── Security tool configuration (tilas01 Rust suite) ──
         // The binaries themselves are built above by the secApps loop, which
@@ -1994,45 +2488,94 @@ run_with_progress() {
 
                     o += `# Verify the boot chain early, before the passphrase prompt, so a warning\n`;
                     o += `# reaches the user while it still matters.\n`;
-                    o += `cat > /etc/initcpio/hooks/otp-tamper << 'OTPHOOK'\n`;
-                    o += `#!/usr/bin/ash\n`;
-                    o += `run_hook() {\n`;
-                    o += `    [ -f /etc/arch-security/otp.seal ] || return 0\n`;
-                    o += `    if /usr/local/bin/libre-otp --verify-tamper --quiet; then\n`;
-                    o += `        return 0\n`;
-                    o += `    fi\n`;
-                    o += `    printf '\\n\\033[1;31m########################################\\033[0m\\n'\n`;
-                    o += `    printf '\\033[1;31m##  BOOT INTEGRITY CHECK FAILED       ##\\033[0m\\n'\n`;
-                    o += `    printf '\\033[1;31m########################################\\033[0m\\n\\n'\n`;
-                    o += `    printf 'The boot chain does not match what was recorded at install.\\n'\n`;
-                    o += `    printf 'This can mean tampering, or simply a kernel or firmware update.\\n\\n'\n`;
-                    o += `    printf 'Do NOT enter your passphrase if you did not expect this.\\n'\n`;
-                    o += `    printf 'Re-seal after a legitimate update with: libre-otp --setup\\n\\n'\n`;
-                    o += `    printf 'Press Enter to continue anyway, or power off now. '\n`;
-                    o += `    read _ack\n`;
-                    o += `}\n`;
-                    o += `OTPHOOK\n`;
-                    o += `chmod 755 /etc/initcpio/hooks/otp-tamper\n\n`;
+                    /* The warning itself, identical wherever it runs. Held once
+                       because the two initramfs generators disagree about the
+                       wrapper around it and about nothing inside it. */
+                    const otpWarn = [
+                        `    printf '\\n\\033[1;31m########################################\\033[0m\\n'`,
+                        `    printf '\\033[1;31m##  BOOT INTEGRITY CHECK FAILED       ##\\033[0m\\n'`,
+                        `    printf '\\033[1;31m########################################\\033[0m\\n\\n'`,
+                        `    printf 'The boot chain does not match what was recorded at install.\\n'`,
+                        `    printf 'This can mean tampering, or simply a kernel or firmware update.\\n\\n'`,
+                        `    printf 'Do NOT enter your passphrase if you did not expect this.\\n'`,
+                        `    printf 'Re-seal after a legitimate update with: libre-otp --setup\\n\\n'`,
+                        `    printf 'Press Enter to continue anyway, or power off now. '`,
+                        `    read _ack`
+                    ];
+                    if (M.initramfs === null && isGentoo) {
+                        /* Dracut's equivalent of an mkinitcpio hook is a module
+                           directory with a module-setup.sh that says what to
+                           copy in and where in the boot sequence to run it.
+                           `pre-mount` is before the root filesystem is opened,
+                           which is the same position `encrypt` occupies on the
+                           other side — the point being that the warning has to
+                           arrive before the passphrase is typed, not after. */
+                        o += `mkdir -p /usr/lib/dracut/modules.d/95otp-tamper\n`;
+                        o += `cat > /usr/lib/dracut/modules.d/95otp-tamper/otp-tamper.sh << 'OTPHOOK'\n`;
+                        o += `#!/bin/sh\n`;
+                        o += `[ -f /etc/arch-security/otp.seal ] || exit 0\n`;
+                        o += `if /usr/local/bin/libre-otp --verify-tamper --quiet; then\n`;
+                        o += `    exit 0\n`;
+                        o += `fi\n`;
+                        // No enclosing function here, so the hook body sits at
+                        // the top level of the script rather than inside one.
+                        otpWarn.forEach(l => { o += `${l.replace(/^ {4}/, '')}\n`; });
+                        o += `OTPHOOK\n`;
+                        o += `chmod 755 /usr/lib/dracut/modules.d/95otp-tamper/otp-tamper.sh\n\n`;
+                        o += `cat > /usr/lib/dracut/modules.d/95otp-tamper/module-setup.sh << 'OTPINST'\n`;
+                        o += `#!/bin/bash\n`;
+                        o += `check() { return 0; }\n`;
+                        o += `depends() { echo crypt; }\n`;
+                        o += `install() {\n`;
+                        o += `    inst_multiple /usr/local/bin/libre-otp\n`;
+                        o += `    inst_simple /etc/arch-security/otp.seal\n`;
+                        o += `    inst_hook pre-mount 10 "$moddir/otp-tamper.sh"\n`;
+                        o += `}\n`;
+                        o += `OTPINST\n`;
+                        o += `chmod 755 /usr/lib/dracut/modules.d/95otp-tamper/module-setup.sh\n`;
+                        o += `echo 'add_dracutmodules+=" otp-tamper "' >> /etc/dracut.conf.d/otp.conf\n`;
+                        o += `dracut --force\n\n`;
 
-                    o += `cat > /etc/initcpio/install/otp-tamper << 'OTPINST'\n`;
-                    o += `#!/bin/bash\n`;
-                    o += `build() {\n`;
-                    o += `    add_runscript\n`;
-                    o += `    add_binary /usr/local/bin/libre-otp\n`;
-                    o += `    add_file /etc/arch-security/otp.seal\n`;
-                    o += `}\n`;
-                    o += `help() { echo "Silent Libre OTP boot-integrity check."; }\n`;
-                    o += `OTPINST\n`;
-                    o += `chmod 755 /etc/initcpio/install/otp-tamper\n`;
-                    o += `sed -i 's/\\(HOOKS=.*\\)\\(encrypt\\|sd-encrypt\\)/\\1otp-tamper \\2/' /etc/mkinitcpio.conf\n`;
-                    o += `mkinitcpio -P\n\n`;
+                        /* Portage has no equivalent of an ALPM hook that fires
+                           on one package, so this is a plain reminder rather
+                           than automation dressed up as automation. */
+                        o += `# Re-seal after any kernel update, or every update looks like tampering\n`;
+                        o += `# and the warning stops meaning anything:\n`;
+                        o += `#   libre-otp --setup\n`;
+                        o += `# Portage has no per-package post-install hook to do this for you.\n`;
+                    } else {
+                        o += `cat > /etc/initcpio/hooks/otp-tamper << 'OTPHOOK'\n`;
+                        o += `#!/usr/bin/ash\n`;
+                        o += `run_hook() {\n`;
+                        o += `    [ -f /etc/arch-security/otp.seal ] || return 0\n`;
+                        o += `    if /usr/local/bin/libre-otp --verify-tamper --quiet; then\n`;
+                        o += `        return 0\n`;
+                        o += `    fi\n`;
+                        otpWarn.forEach(l => { o += `${l}\n`; });
+                        o += `}\n`;
+                        o += `OTPHOOK\n`;
+                        o += `chmod 755 /etc/initcpio/hooks/otp-tamper\n\n`;
 
-                    o += `# Re-seal automatically after a kernel update, or every update would\n`;
-                    o += `# look like tampering and the warning would be ignored.\n`;
-                    o += `cat > /usr/share/libalpm/hooks/95-otp-reseal.hook << 'RESEAL'\n`;
-                    o += `[Trigger]\nOperation = Install\nOperation = Upgrade\nType = Package\nTarget = linux\nTarget = linux-*\n\n`;
-                    o += `[Action]\nDescription = Re-sealing Libre OTP boot integrity baseline...\nWhen = PostTransaction\nExec = /usr/local/bin/libre-otp --setup\n`;
-                    o += `RESEAL\n`;
+                        o += `cat > /etc/initcpio/install/otp-tamper << 'OTPINST'\n`;
+                        o += `#!/bin/bash\n`;
+                        o += `build() {\n`;
+                        o += `    add_runscript\n`;
+                        o += `    add_binary /usr/local/bin/libre-otp\n`;
+                        o += `    add_file /etc/arch-security/otp.seal\n`;
+                        o += `}\n`;
+                        o += `help() { echo "Silent Libre OTP boot-integrity check."; }\n`;
+                        o += `OTPINST\n`;
+                        o += `chmod 755 /etc/initcpio/install/otp-tamper\n`;
+                        o += `sed -i 's/\\(HOOKS=.*\\)\\(encrypt\\|sd-encrypt\\)/\\1otp-tamper \\2/' /etc/mkinitcpio.conf\n`;
+                        o += `mkinitcpio -P\n\n`;
+
+                        o += `# Re-seal automatically after a kernel update, or every update would\n`;
+                        o += `# look like tampering and the warning would be ignored.\n`;
+                        o += `cat > /usr/share/libalpm/hooks/95-otp-reseal.hook << 'RESEAL'\n`;
+                        o += `[Trigger]\nOperation = Install\nOperation = Upgrade\nType = Package\nTarget = linux\nTarget = linux-*\n\n`;
+                        o += `[Action]\nDescription = Re-sealing Libre OTP boot integrity baseline...\nWhen = PostTransaction\nExec = /usr/local/bin/libre-otp --setup\n`;
+                        o += `RESEAL\n`;
+                    }
 
                     if (!cmdOnly) {
                         o += `\`\`\`\n\n`;
@@ -2094,25 +2637,51 @@ run_with_progress() {
                         // this step failed silently and the boot prompt was never
                         // actually installed on any machine that ran the script.
                         // Writing the hook directly is what the flag would have done.
-                        o += `cat > /etc/initcpio/hooks/libre-otp << 'OTPHOOK'\n`;
-                        o += `#!/usr/bin/env bash\n`;
-                        o += `run_hook() {\n`;
-                        o += `    /usr/local/bin/libre-otp --gate || exit 1\n`;
-                        o += `}\n`;
-                        o += `OTPHOOK\n`;
-                        o += `cat > /etc/initcpio/install/libre-otp << 'OTPINST'\n`;
-                        o += `#!/usr/bin/env bash\n`;
-                        o += `build() {\n`;
-                        o += `    add_binary /usr/local/bin/libre-otp\n`;
-                        o += `    add_runscript\n`;
-                        o += `}\n`;
-                        o += `help() { echo "Prompts for a Libre OTP code before unlocking."; }\n`;
-                        o += `OTPINST\n`;
-                        o += `chmod 755 /etc/initcpio/hooks/libre-otp /etc/initcpio/install/libre-otp\n`;
-                        o += `# Must precede 'encrypt' in HOOKS= or it never runs.\n`;
-                        o += `sed -i 's/\\(^HOOKS=.*\\)\\bencrypt\\b/\\1libre-otp encrypt/' /etc/mkinitcpio.conf\n`;
-                        o += `grep -n '^HOOKS=' /etc/mkinitcpio.conf   # confirm before rebooting\n`;
-                        o += `mkinitcpio -P\n`;
+                        if (M.initramfs === null && isGentoo) {
+                            /* Same gate, dracut's shape. The ordering
+                               requirement is identical and is expressed by the
+                               hook point rather than by a position in a list:
+                               `cmdline` runs before `crypt` unlocks anything,
+                               which is what makes the prompt come first. */
+                            o += `mkdir -p /usr/lib/dracut/modules.d/90libre-otp\n`;
+                            o += `cat > /usr/lib/dracut/modules.d/90libre-otp/libre-otp.sh << 'OTPHOOK'\n`;
+                            o += `#!/bin/sh\n`;
+                            o += `/usr/local/bin/libre-otp --gate || exit 1\n`;
+                            o += `OTPHOOK\n`;
+                            o += `cat > /usr/lib/dracut/modules.d/90libre-otp/module-setup.sh << 'OTPINST'\n`;
+                            o += `#!/bin/bash\n`;
+                            o += `check() { return 0; }\n`;
+                            o += `depends() { echo crypt; }\n`;
+                            o += `install() {\n`;
+                            o += `    inst_multiple /usr/local/bin/libre-otp\n`;
+                            o += `    inst_hook cmdline 90 "$moddir/libre-otp.sh"\n`;
+                            o += `}\n`;
+                            o += `OTPINST\n`;
+                            o += `chmod 755 /usr/lib/dracut/modules.d/90libre-otp/libre-otp.sh \\\n`;
+                            o += `          /usr/lib/dracut/modules.d/90libre-otp/module-setup.sh\n`;
+                            o += `echo 'add_dracutmodules+=" libre-otp "' >> /etc/dracut.conf.d/otp.conf\n`;
+                            o += `dracut --force\n`;
+                        } else {
+                            o += `cat > /etc/initcpio/hooks/libre-otp << 'OTPHOOK'\n`;
+                            o += `#!/usr/bin/env bash\n`;
+                            o += `run_hook() {\n`;
+                            o += `    /usr/local/bin/libre-otp --gate || exit 1\n`;
+                            o += `}\n`;
+                            o += `OTPHOOK\n`;
+                            o += `cat > /etc/initcpio/install/libre-otp << 'OTPINST'\n`;
+                            o += `#!/usr/bin/env bash\n`;
+                            o += `build() {\n`;
+                            o += `    add_binary /usr/local/bin/libre-otp\n`;
+                            o += `    add_runscript\n`;
+                            o += `}\n`;
+                            o += `help() { echo "Prompts for a Libre OTP code before unlocking."; }\n`;
+                            o += `OTPINST\n`;
+                            o += `chmod 755 /etc/initcpio/hooks/libre-otp /etc/initcpio/install/libre-otp\n`;
+                            o += `# Must precede 'encrypt' in HOOKS= or it never runs.\n`;
+                            o += `sed -i 's/\\(^HOOKS=.*\\)\\bencrypt\\b/\\1libre-otp encrypt/' /etc/mkinitcpio.conf\n`;
+                            o += `grep -n '^HOOKS=' /etc/mkinitcpio.conf   # confirm before rebooting\n`;
+                            o += `${M.initramfs}\n`;
+                        }
                     }
                     // sshd is covered by the loop above, which adds a line only
                     // to files that do not already reach system-auth. Appending
@@ -2275,7 +2844,21 @@ run_with_progress() {
                         o += `echo "Point your screen locker at /usr/local/bin/anti-evil-maid-on-lock"\n`;
                     } else {
                         o += `anti-evil-maid --configure-autolock --idle ${aemAutolock}\n`;
-                        o += `systemctl enable anti-evil-maid-autolock.timer\n`;
+                        if (openrc) {
+                            /* The crate writes systemd units and nothing else.
+                               On OpenRC those files are written and never read,
+                               so the auto-lock would appear configured and never
+                               fire — worse than not offering it, because the
+                               owner would believe the key was flushed. Said
+                               plainly rather than emitting an enable command for
+                               a unit no init here will run. */
+                            o += `# NOT ENABLED: anti-evil-maid --configure-autolock writes systemd\n`;
+                            o += `# units, and this system does not run systemd. The configuration\n`;
+                            o += `# above is written and the timer will not fire. Lock on demand\n`;
+                            o += `# with 'anti-evil-maid --lock-now' until an OpenRC service exists.\n`;
+                        } else {
+                            o += `systemctl enable anti-evil-maid-autolock.timer\n`;
+                        }
                     }
                     // Make the lock screen an actual boundary: a watcher for
                     // logind's session-lock signal suspends the volume the
@@ -2283,9 +2866,33 @@ run_with_progress() {
                     // for as long as the owner is away.
                     if ((document.getElementById('modal_aem_lock_on_screen')?.value || 'no') === 'yes') {
                         o += `\n# Suspend LUKS whenever the session locks.\n`;
-                        o += `pacman -S --needed --noconfirm dbus\n`;
+                        o += `${instNeeded(['dbus'])}\n`;
                         o += `anti-evil-maid --install-lock-hook\n`;
-                        o += `systemctl enable anti-evil-maid-lock-watch.service\n`;
+                        if (openrc) {
+                            /* The watcher listens for logind's session-lock
+                               signal. elogind provides the same D-Bus interface
+                               under OpenRC, so the mechanism is available — but
+                               the unit the tool writes is a systemd one. */
+                            o += `${instNeeded(['elogind'])}\n`;
+                            /* The watcher itself is a plain dbus-monitor loop at
+                               a fixed path, so it is init-agnostic; only the
+                               unit the tool writes is systemd's. An OpenRC
+                               service script for the same binary is written
+                               here rather than leaving the feature installed
+                               and never started. */
+                            o += `cat > /etc/init.d/anti-evil-maid-lock-watch << 'AEMWATCH'\n`;
+                            o += `#!/sbin/openrc-run\n`;
+                            o += `description="Suspend the LUKS volume when the session locks"\n`;
+                            o += `command="/usr/local/bin/anti-evil-maid-lock-watch"\n`;
+                            o += `command_background=true\n`;
+                            o += `pidfile="/run/anti-evil-maid-lock-watch.pid"\n`;
+                            o += `depend() { need dbus; }\n`;
+                            o += `AEMWATCH\n`;
+                            o += `chmod 755 /etc/init.d/anti-evil-maid-lock-watch\n`;
+                            o += `${svc('anti-evil-maid-lock-watch')}\n`;
+                        } else {
+                            o += `systemctl enable anti-evil-maid-lock-watch.service\n`;
+                        }
                     }
                     o += `echo "Test this before relying on it: suspending the root volume freezes"\n`;
                     o += `echo "all disk I/O until the passphrase is typed, and a mistake needs a"\n`;
@@ -2324,8 +2931,18 @@ run_with_progress() {
                 o += `rm -f "$REPORT" "$REPORT.full"\n`;
                 o += `AEMCHECK\n`;
                 o += `chmod 700 /usr/local/bin/aem-boot-check\n\n`;
-                o += `cat << 'AEM_DAEMON' > /etc/systemd/system/aem.service\n[Unit]\nDescription=Anti-Evil Maid boot integrity check\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/aem-boot-check\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nAEM_DAEMON\n`;
-                o += `systemctl enable aem.service\n`;
+                /* The check itself is a script at a fixed path, so only the
+                   thing that starts it at boot differs. Written for the init
+                   that is actually present rather than writing a systemd unit
+                   and hoping. */
+                if (openrc) {
+                    o += `cat << 'AEM_DAEMON' > /etc/init.d/aem\n#!/sbin/openrc-run\ndescription="Anti-Evil Maid boot integrity check"\ncommand="/usr/local/bin/aem-boot-check"\ndepend() { after net; }\nAEM_DAEMON\n`;
+                    o += `chmod 755 /etc/init.d/aem\n`;
+                    o += `${svc('aem')}\n`;
+                } else {
+                    o += `cat << 'AEM_DAEMON' > /etc/systemd/system/aem.service\n[Unit]\nDescription=Anti-Evil Maid boot integrity check\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/bin/aem-boot-check\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\nAEM_DAEMON\n`;
+                    o += `systemctl enable aem.service\n`;
+                }
 
                 // Periodic filesystem hash checks
                 o += `cat << 'AEM_HASH' > /usr/local/bin/aem-fs-hash-check.sh\n#!/bin/bash\nanti-evil-maid --fs-hash-check >> /var/log/aem-fs-hash.log 2>&1\nAEM_HASH\n`;
@@ -2353,7 +2970,7 @@ run_with_progress() {
                 o += `  1. Plug in every keyboard, mouse and dock you actually use.\n`;
                 o += `  2. sudo anti-ducky --enroll          # confirms each device in turn\n`;
                 o += `  3. sudo anti-ducky --export-whitelist  # check what it now trusts\n`;
-                o += `  4. sudo systemctl enable --now anti-ducky.service\n`;
+                o += `  4. sudo ${svcNow(openrc ? 'anti-ducky' : 'anti-ducky.service')}\n`;
                 o += `DUCKYMOTD\n`;
 
                 // What happens after a payload is confirmed. Capture and
@@ -2387,21 +3004,35 @@ run_with_progress() {
                 // Without this, a power-off response takes the on-screen warning
                 // with it and the attack leaves nothing the owner will ever see.
                 o += `\n# Show the alert after the next boot.\n`;
-                o += `cat > /etc/systemd/system/anti-ducky-boot-alert.service << 'DUCKYBOOT'\n`;
-                o += `[Unit]\n`;
-                o += `Description=Show any BadUSB alert recorded before this boot\n`;
-                o += `After=multi-user.target\n`;
-                o += `\n`;
-                o += `[Service]\n`;
-                o += `Type=oneshot\n`;
-                o += `ExecStart=/usr/bin/anti-ducky --show-boot-alerts\n`;
-                o += `StandardOutput=tty\n`;
-                o += `TTYPath=/dev/tty1\n`;
-                o += `\n`;
-                o += `[Install]\n`;
-                o += `WantedBy=multi-user.target\n`;
-                o += `DUCKYBOOT\n`;
-                o += `systemctl enable anti-ducky-boot-alert.service\n`;
+                if (openrc) {
+                    o += `cat > /etc/init.d/anti-ducky-boot-alert << 'DUCKYBOOT'\n`;
+                    o += `#!/sbin/openrc-run\n`;
+                    o += `description="Show any BadUSB alert recorded before this boot"\n`;
+                    o += `command="/usr/bin/anti-ducky"\n`;
+                    o += `command_args="--show-boot-alerts"\n`;
+                    o += `# The warning has to land somewhere a person will see it, which is the\n`;
+                    o += `# console rather than a log file.\n`;
+                    o += `output_log="/dev/tty1"\n`;
+                    o += `error_log="/dev/tty1"\n`;
+                    o += `DUCKYBOOT\n`;
+                    o += `chmod 755 /etc/init.d/anti-ducky-boot-alert\n`;
+                } else {
+                    o += `cat > /etc/systemd/system/anti-ducky-boot-alert.service << 'DUCKYBOOT'\n`;
+                    o += `[Unit]\n`;
+                    o += `Description=Show any BadUSB alert recorded before this boot\n`;
+                    o += `After=multi-user.target\n`;
+                    o += `\n`;
+                    o += `[Service]\n`;
+                    o += `Type=oneshot\n`;
+                    o += `ExecStart=/usr/bin/anti-ducky --show-boot-alerts\n`;
+                    o += `StandardOutput=tty\n`;
+                    o += `TTYPath=/dev/tty1\n`;
+                    o += `\n`;
+                    o += `[Install]\n`;
+                    o += `WantedBy=multi-user.target\n`;
+                    o += `DUCKYBOOT\n`;
+                }
+                o += `${svc(openrc ? 'anti-ducky-boot-alert' : 'anti-ducky-boot-alert.service')}\n`;
                 // Report the full device identity, so the user can judge it rather
                 // than just being told "something happened".
                 o += `\n# Alert on an unrecognised USB input device, with its full identity.\n`;
@@ -2445,23 +3076,23 @@ run_with_progress() {
                 o += `sed -i 's/^#*PermitRootLogin.*/PermitRootLogin ${root_ssh === 'yes' ? 'prohibit-password' : 'no'}/' /etc/ssh/sshd_config\n`;
                 o += `sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config\n`;
                 o += `sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config\n`;
-                o += `ssh-keygen -A\nsystemctl enable sshd\n`;
+                o += `ssh-keygen -A\n${svc('sshd')}\n`;
             }
 
             if (effectiveSuite.includes('kloak')) {
-                o += `\n# Installing Kloak (keystroke timing anonymisation)\nsystemctl enable kloak\n`;
+                o += `\n# Installing Kloak (keystroke timing anonymisation)\n${svc('kloak')}\n`;
             }
 
             if (effectiveSuite.includes('kernel-watcher')) {
                 o += `\n# Configuring Kernel Watcher (Semi-EDR)\nkernel-watcher --setup\n`;
                 o += `cat << 'KW' > /etc/systemd/system/kernel-watcher.service\n[Unit]\nDescription=Kernel Watcher EDR daemon\nAfter=network.target\n\n[Service]\nExecStart=/usr/local/bin/kernel-watcher\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\nKW\n`;
-                o += `systemctl enable kernel-watcher.service\n`;
+                o += `${svc(openrc ? 'kernel-watcher' : 'kernel-watcher.service')}\n`;
             }
 
             if (effectiveSuite.includes('scarecrow')) {
                 o += `\n# Configuring Scarecrow (canary tokens / sandbox spoofing)\n`;
                 o += `cat << 'SC' > /etc/systemd/system/scarecrow.service\n[Unit]\nDescription=Scarecrow canary token monitor\nAfter=network.target\n\n[Service]\nExecStart=/usr/local/bin/scarecrow\nRestart=always\n\n[Install]\nWantedBy=multi-user.target\nSC\n`;
-                o += `systemctl enable scarecrow.service\n`;
+                o += `${svc(openrc ? 'scarecrow' : 'scarecrow.service')}\n`;
             }
         }
 
@@ -2476,7 +3107,7 @@ run_with_progress() {
             else o += `\n# 8. Other Security Tools\n`;
 
             if (other_sec_tools.includes('apparmor')) {
-                o += `pacman -S --noconfirm apparmor\n`;
+                o += `${inst(['apparmor'])}\n`;
                 // Only GRUB reads /etc/default/grub; UKI/systemd-boot use the cmdline file.
                 if (boot === 'grub') {
                     o += `sed -i 's/^GRUB_CMDLINE_LINUX="/GRUB_CMDLINE_LINUX="apparmor=1 lsm=landlock,lockdown,yama,apparmor,bpf /' /etc/default/grub\n`;
@@ -2484,31 +3115,40 @@ run_with_progress() {
                 } else {
                     o += `echo 'apparmor=1 lsm=landlock,lockdown,yama,apparmor,bpf' >> /etc/kernel/cmdline\n`;
                 }
-                o += `systemctl enable apparmor\n`;
+                o += `${svc('apparmor')}\n`;
             }
             if (other_sec_tools.includes('usbguard')) {
-                o += `pacman -S --noconfirm usbguard\nusbguard generate-policy > /etc/usbguard/rules.conf\nsystemctl enable usbguard\n`;
+                o += `${inst(['usbguard'])}\nusbguard generate-policy > /etc/usbguard/rules.conf\n${svc('usbguard')}\n`;
             }
             if (other_sec_tools.includes('auditd')) {
-                o += `pacman -S --noconfirm audit\nsystemctl enable auditd\n`;
+                o += `${inst(['audit'])}\n${svc('auditd')}\n`;
                 o += `echo '-w /etc/passwd -p wa -k passwd_changes' >> /etc/audit/rules.d/audit.rules\n`;
                 o += `echo '-w /etc/sudoers -p wa -k sudoers_changes' >> /etc/audit/rules.d/audit.rules\n`;
             }
             if (other_sec_tools.includes('fail2ban')) {
-                o += `pacman -S --noconfirm fail2ban\ncat > /etc/fail2ban/jail.local << 'F2B'\n[DEFAULT]\nbantime = 3600\nfindtime = 600\nmaxretry = 3\n[sshd]\nenabled = true\nF2B\nsystemctl enable fail2ban\n`;
+                o += `${inst(['fail2ban'])}\ncat > /etc/fail2ban/jail.local << 'F2B'\n[DEFAULT]\nbantime = 3600\nfindtime = 600\nmaxretry = 3\n[sshd]\nenabled = true\nF2B\n${svc('fail2ban')}\n`;
             }
             if (other_sec_tools.includes('ufw')) {
-                o += `pacman -S --noconfirm ufw\nufw default deny incoming\nufw default allow outgoing\nsystemctl enable ufw\n`;
+                o += `${inst(['ufw'])}\nufw default deny incoming\nufw default allow outgoing\n${svc('ufw')}\n`;
             }
             if (other_sec_tools.includes('lynis')) {
-                o += `pacman -S --noconfirm lynis\n# Run an initial audit and keep the report for review\nlynis audit system --quick --no-colors > /var/log/lynis-initial.log 2>&1 || true\n`;
+                o += `${inst(['lynis'])}\n# Run an initial audit and keep the report for review\nlynis audit system --quick --no-colors > /var/log/lynis-initial.log 2>&1 || true\n`;
             }
             if (other_sec_tools.includes('usbkill')) {
                 // Upstream usbkill: installed but deliberately NOT enabled, because
                 // it powers the machine off with no confirmation. Arming it is an
                 // explicit, separate decision the user makes on the machine itself.
                 o += `\n# usbkill (upstream anti-forensic kill switch)\n`;
-                o += `su - builder -c "paru -S --noconfirm usbkill"\n`;
+                if (M.aur) {
+                    o += `su - builder -c "paru -S --noconfirm usbkill"\n`;
+                } else {
+                    /* Upstream ships it on PyPI and there is no package here.
+                       Installed from the source it is actually published as,
+                       rather than through a package name that does not exist. */
+                    o += `# No ${osLabel} package: installed from upstream, which is where it lives.\n`;
+                    o += `git clone https://github.com/hephaest0s/usbkill.git /opt/usbkill\n`;
+                    o += `(cd /opt/usbkill && python setup.py install)\n`;
+                }
                 if (effectiveSuite.includes('anti-ducky')) {
                     // One allowlist, two consumers. Two tools with two different
                     // ideas of what is trusted is how a machine powers itself
@@ -2533,8 +3173,8 @@ run_with_progress() {
         if (auto_updates === "yes" || post_apps.includes("unattended-upgrades")) {
             if (!cmdOnly) o += `\`\`\`\n\n## 10. Auto Updates\n\`\`\`bash\n`;
             else o += `\n# 10. Auto Updates\n`;
-            o += `systemctl enable cronie\n`;
-            if (post_apps.includes("unattended-upgrades")) {
+            o += `${svc('cronie')}\n`;
+            if (post_apps.includes("unattended-upgrades") && M.aur) {
                 o += `su - builder -c "paru -S --noconfirm unattended-upgrades"\n`;
                 o += `mkdir -p /etc/unattended-upgrades\n`;
                 o += `cat << 'UPCONF' > /etc/unattended-upgrades/unattended-upgrades.conf\n`;
@@ -2543,12 +3183,28 @@ run_with_progress() {
                 o += `UPCONF\n`;
                 o += `systemctl enable --now unattended-upgrades.timer\n`;
             } else {
+                if (post_apps.includes("unattended-upgrades")) {
+                    o += `# unattended-upgrades is Debian's and has no ${osLabel} equivalent.\n`;
+                    o += `# The cron job below does the same job with this system's own\n`;
+                    o += `# package manager.\n`;
+                }
                 o += `cat << 'CRON_SCRIPT' > /usr/local/bin/auto-update.sh\n#!/bin/bash\n`;
                 o += `echo "[$(date)] Starting full system auto-update..." >> /var/log/auto-update.log\n`;
-                o += `pacman -Syu --noconfirm >> /var/log/auto-update.log 2>&1\n`;
-                o += `if id "builder" >/dev/null 2>&1 && command -v paru >/dev/null 2>&1; then\n`;
-                o += `  su - builder -c "paru -Sua --noconfirm" >> /var/log/auto-update.log 2>&1\n`;
-                o += `fi\n`;
+                if (isGentoo) {
+                    /* A source-based system has to fetch the tree first, and an
+                       unattended world update can run for hours — so it is
+                       logged the same way and the caveat is stated where the
+                       reader will meet it. */
+                    o += `${M.sync} >> /var/log/auto-update.log 2>&1\n`;
+                    o += `${M.upgrade} >> /var/log/auto-update.log 2>&1\n`;
+                    o += `# An unattended world update on a source-based system can run for\n`;
+                    o += `# hours and will use every core it was told it could.\n`;
+                } else {
+                    o += `${M.upgrade} >> /var/log/auto-update.log 2>&1\n`;
+                    o += `if id "builder" >/dev/null 2>&1 && command -v paru >/dev/null 2>&1; then\n`;
+                    o += `  su - builder -c "paru -Sua --noconfirm" >> /var/log/auto-update.log 2>&1\n`;
+                    o += `fi\n`;
+                }
                 o += `echo "[$(date)] System update complete." >> /var/log/auto-update.log\n`;
                 o += `# If system is inactive (0 users logged in), reboot to apply kernel/systemd updates\n`;
                 o += `if [ "$(who | wc -l)" -eq 0 ]; then\n`;
@@ -2595,9 +3251,20 @@ run_with_progress() {
             // Add execution of rollover to bashrc so it runs on first login
             o += `echo "/home/$u1/post_boot_setup.sh" >> /home/$u1/.bashrc\n`;
             
-            o += `EOF\nchmod +x /mnt/chroot_script.sh\narch-chroot /mnt /chroot_script.sh\n`;
-            if (cleanup === "yes") o += `arch-chroot /mnt pacman -Scc --noconfirm\nrm -rf /mnt/var/cache/pacman/pkg/* /mnt/tmp/*\n`;
-            o += `rm -f /mnt/chroot_script.sh\n`;
+            o += `EOF\nchmod +x ${mntRoot}/chroot_script.sh\n${chrootRun('/chroot_script.sh')}\n`;
+            if (cleanup === "yes") {
+                if (isGentoo) {
+                    /* Portage's caches are distfiles (sources) and binpkgs, in
+                       different places from pacman's one package directory, and
+                       eclean is the supported way to clear them without removing
+                       what the installed system still refers to. */
+                    o += `${chrootRun("-c 'emerge --verbose --noreplace app-portage/gentoolkit && eclean-dist --deep && eclean-pkg --deep'")}\n`;
+                    o += `rm -rf ${mntRoot}/${M.pkgCache}/* ${mntRoot}/tmp/*\n`;
+                } else {
+                    o += `arch-chroot /mnt pacman -Scc --noconfirm\nrm -rf /mnt/var/cache/pacman/pkg/* /mnt/tmp/*\n`;
+                }
+            }
+            o += `rm -f ${mntRoot}/chroot_script.sh\n`;
             if (configMode === 'preconfigured') {
                 o += `echo -e "\\e[33m[!] WALK-AWAY AUTOMATION: Securely wiping credentials from memory...\\e[0m"\n`;
                 o += `unset LUKS_PASS LUKS_PASS2 ROOT_PASS ROOT_PASS2\n`;
@@ -2777,7 +3444,7 @@ function buildUsbKill(action, trigger, cmdOnly) {
         }
     }
 
-    o += `pacman -S --noconfirm --needed usbutils\n`;
+    o += `${genInstall(['usbutils'])}\n`;
     o += `mkdir -p /etc/arch-security\n\n`;
 
     o += `# Snapshot the currently-attached USB devices as the allowlist.\n`;
@@ -2914,62 +3581,95 @@ function buildLuksDuress(action, decoyEnv, partRoot, cmdOnly) {
     o += `chmod 600 /mnt/etc/arch-security/duress.conf\n`;
     o += `unset DURESS_PASS DURESS_PASS2 DURESS_HASH DURESS_SALT\n\n`;
 
-    // The initramfs hook that reacts to the duress passphrase.
-    o += `# Initramfs hook: compare the entered passphrase against the stored hash.\n`;
-    o += `cat > /mnt/etc/initcpio/hooks/duress << 'HOOK_EOF'\n`;
-    o += `#!/usr/bin/ash\n`;
-    o += `run_hook() {\n`;
-    o += `    [ -f /etc/arch-security/duress.conf ] || return 0\n`;
-    o += `    . /etc/arch-security/duress.conf\n`;
-    o += `    printf 'Enter passphrase: '\n`;
-    o += `    read -s _pw; echo\n`;
-    o += `    _try=$(printf '%s%s' "$SALT" "$_pw" | sha512sum | cut -d' ' -f1)\n`;
-    o += `    if [ "$_try" != "$HASH" ]; then\n`;
-    o += `        # Not the duress passphrase: hand it to the normal unlock path.\n`;
-    o += `        printf '%s' "$_pw" > /crypto_keyfile.bin\n`;
-    o += `        unset _pw _try\n`;
-    o += `        return 0\n`;
-    o += `    fi\n`;
-    o += `    unset _pw _try\n`;
-
+    /* The body of the hook: what it does when the passphrase is entered. The
+       same on every system, because it is the initramfs *generator* that
+       differs and not the logic. Held as lines so both wrappers can carry it
+       without the two copies drifting apart — and this one especially must not
+       drift, because a duress passphrase that has quietly stopped being checked
+       is worse than not having one. */
+    const duressBody = [];
+    duressBody.push(`    [ -f /etc/arch-security/duress.conf ] || return 0`);
+    duressBody.push(`    . /etc/arch-security/duress.conf`);
+    duressBody.push(`    printf 'Enter passphrase: '`);
+    duressBody.push(`    read -s _pw; echo`);
+    duressBody.push(`    _try=$(printf '%s%s' "$SALT" "$_pw" | sha512sum | cut -d' ' -f1)`);
+    duressBody.push(`    if [ "$_try" != "$HASH" ]; then`);
+    duressBody.push(`        # Not the duress passphrase: hand it to the normal unlock path.`);
+    duressBody.push(`        printf '%s' "$_pw" > /crypto_keyfile.bin`);
+    duressBody.push(`        unset _pw _try`);
+    duressBody.push(`        return 0`);
+    duressBody.push(`    fi`);
+    duressBody.push(`    unset _pw _try`);
     if (destructive) {
-        o += `    # Duress: erase every keyslot. This is irreversible.\n`;
-        o += `    cryptsetup erase --batch-mode ${partRoot} >/dev/null 2>&1\n`;
-        o += `    # Overwrite the header area as a second line of defence.\n`;
-        o += `    dd if=/dev/urandom of=${partRoot} bs=1M count=32 conv=fsync >/dev/null 2>&1\n`;
+        duressBody.push(`    # Duress: erase every keyslot. This is irreversible.`);
+        duressBody.push(`    cryptsetup erase --batch-mode ${partRoot} >/dev/null 2>&1`);
+        duressBody.push(`    # Overwrite the header area as a second line of defence.`);
+        duressBody.push(`    dd if=/dev/urandom of=${partRoot} bs=1M count=32 conv=fsync >/dev/null 2>&1`);
     }
-
     if (usesDecoy) {
-        o += `    # Boot the decoy volume. It has no reference to the real volume.\n`;
-        o += `    if cryptsetup open --key-file=- /dev/disk/by-partlabel/decoy decoyroot; then\n`;
-        o += `        mount /dev/mapper/decoyroot /new_root 2>/dev/null && return 0\n`;
-        o += `    fi\n`;
-        o += `    # Decoy unavailable: fall back to powering off rather than revealing anything.\n`;
-        o += `    poweroff -f\n`;
+        duressBody.push(`    # Boot the decoy volume. It has no reference to the real volume.`);
+        duressBody.push(`    if cryptsetup open --key-file=- /dev/disk/by-partlabel/decoy decoyroot; then`);
+        duressBody.push(`        mount /dev/mapper/decoyroot /new_root 2>/dev/null && return 0`);
+        duressBody.push(`    fi`);
+        duressBody.push(`    # Decoy unavailable: fall back to powering off rather than revealing anything.`);
+        duressBody.push(`    poweroff -f`);
     } else {
-        o += `    # No decoy configured: power off immediately.\n`;
-        o += `    poweroff -f\n`;
+        duressBody.push(`    # No decoy configured: power off immediately.`);
+        duressBody.push(`    poweroff -f`);
     }
 
-    o += `}\n`;
-    o += `HOOK_EOF\n`;
-    o += `chmod 755 /mnt/etc/initcpio/hooks/duress\n\n`;
+    const mnt = genOs.mnt || '/mnt';
+    o += `# Initramfs hook: compare the entered passphrase against the stored hash.\n`;
+    if (genOs.gentoo) {
+        /* Dracut's shape. The prompt has to come before the volume is opened,
+           which here is the `cmdline` hook rather than a position in a HOOKS
+           list — and `return 0` becomes `exit 0` because the body is a script
+           rather than a function. */
+        o += `mkdir -p ${mnt}/usr/lib/dracut/modules.d/90duress\n`;
+        o += `cat > ${mnt}/usr/lib/dracut/modules.d/90duress/duress.sh << 'HOOK_EOF'\n`;
+        o += `#!/bin/sh\n`;
+        duressBody.forEach(l => { o += `${l.replace(/^ {4}/, '').replace(/\breturn 0\b/, 'exit 0')}\n`; });
+        o += `HOOK_EOF\n`;
+        o += `chmod 755 ${mnt}/usr/lib/dracut/modules.d/90duress/duress.sh\n\n`;
+        o += `cat > ${mnt}/usr/lib/dracut/modules.d/90duress/module-setup.sh << 'INST_EOF'\n`;
+        o += `#!/bin/bash\n`;
+        o += `check() { return 0; }\n`;
+        o += `depends() { echo crypt; }\n`;
+        o += `install() {\n`;
+        o += `    inst_multiple cryptsetup sha512sum dd\n`;
+        o += `    inst_simple /etc/arch-security/duress.conf\n`;
+        o += `    inst_hook cmdline 20 "$moddir/duress.sh"\n`;
+        o += `}\n`;
+        o += `INST_EOF\n`;
+        o += `chmod 755 ${mnt}/usr/lib/dracut/modules.d/90duress/module-setup.sh\n\n`;
+        o += `mkdir -p ${mnt}/etc/dracut.conf.d\n`;
+        o += `echo 'add_dracutmodules+=" duress "' >> ${mnt}/etc/dracut.conf.d/duress.conf\n`;
+        o += `chroot ${mnt} /bin/bash -c 'dracut --force'\n`;
+    } else {
+        o += `cat > /mnt/etc/initcpio/hooks/duress << 'HOOK_EOF'\n`;
+        o += `#!/usr/bin/ash\n`;
+        o += `run_hook() {\n`;
+        duressBody.forEach(l => { o += `${l}\n`; });
+        o += `}\n`;
+        o += `HOOK_EOF\n`;
+        o += `chmod 755 /mnt/etc/initcpio/hooks/duress\n\n`;
 
-    o += `cat > /mnt/etc/initcpio/install/duress << 'INST_EOF'\n`;
-    o += `#!/bin/bash\n`;
-    o += `build() {\n`;
-    o += `    add_runscript\n`;
-    o += `    add_binary cryptsetup\n`;
-    o += `    add_binary sha512sum\n`;
-    o += `    add_binary dd\n`;
-    o += `    add_file /etc/arch-security/duress.conf\n`;
-    o += `}\n`;
-    o += `help() { echo "Handles the LUKS duress passphrase."; }\n`;
-    o += `INST_EOF\n`;
-    o += `chmod 755 /mnt/etc/initcpio/install/duress\n\n`;
-    o += `# Add the hook ahead of encrypt/sd-encrypt so it sees the passphrase first.\n`;
-    o += `sed -i 's/\\(HOOKS=.*\\)\\(encrypt\\|sd-encrypt\\)/\\1duress \\2/' /mnt/etc/mkinitcpio.conf\n`;
-    o += `arch-chroot /mnt mkinitcpio -P\n`;
+        o += `cat > /mnt/etc/initcpio/install/duress << 'INST_EOF'\n`;
+        o += `#!/bin/bash\n`;
+        o += `build() {\n`;
+        o += `    add_runscript\n`;
+        o += `    add_binary cryptsetup\n`;
+        o += `    add_binary sha512sum\n`;
+        o += `    add_binary dd\n`;
+        o += `    add_file /etc/arch-security/duress.conf\n`;
+        o += `}\n`;
+        o += `help() { echo "Handles the LUKS duress passphrase."; }\n`;
+        o += `INST_EOF\n`;
+        o += `chmod 755 /mnt/etc/initcpio/install/duress\n\n`;
+        o += `# Add the hook ahead of encrypt/sd-encrypt so it sees the passphrase first.\n`;
+        o += `sed -i 's/\\(HOOKS=.*\\)\\(encrypt\\|sd-encrypt\\)/\\1duress \\2/' /mnt/etc/mkinitcpio.conf\n`;
+        o += `arch-chroot /mnt mkinitcpio -P\n`;
+    }
 
     if (usesDecoy) {
         o += `\n# Reminder: create the decoy volume before relying on this.\n`;
@@ -4895,7 +5595,50 @@ function applyGeneratorOs() {
                               : '');
         sub.style.color = m.complete === false ? 'var(--accent-orange)' : '';
     }
+    applyAurAvailability();
     refreshDocumentTitle();
+}
+
+/* Options that only exist because Arch has an AUR.
+ *
+ * Offering an AUR helper on a system with no AUR is a control wired to nothing,
+ * and leaving it ticked by default puts it into the saved configuration, where
+ * it reads as a package the reader asked for. The cards are disabled and say
+ * why rather than disappearing: a reader who has seen this list on Arch should
+ * be able to tell that the option was considered and does not apply, which is
+ * the same reasoning the desktop question uses for Dusky.
+ */
+const AUR_ONLY_APPS = ['paru'];
+function applyAurAvailability() {
+    const key = (typeof window.targetOS === 'function') ? window.targetOS() : 'arch';
+    const hasModel = window.osHasInstallModel ? window.osHasInstallModel(key) : (key === 'arch');
+    const model = window.osInstallModel
+        ? window.osInstallModel(hasModel ? key : 'arch') : null;
+    const aur = !model || model.aur !== false;
+    const label = (window.OS_META && window.OS_META[key]) ? window.OS_META[key].label : 'this system';
+
+    AUR_ONLY_APPS.forEach(function (value) {
+        const box = document.querySelector('input[name="post_apps"][value="' + value + '"]');
+        if (!box) return;
+        const card = box.closest('.app-card');
+        box.disabled = !aur;
+        if (!aur) box.checked = false;
+        if (!card) return;
+        /* The same treatment a libre-blocked card gets: visibly inert rather
+           than merely dimmed, so it does not read as simply unticked. */
+        card.classList.toggle('app-disabled', !aur);
+        let note = card.querySelector('.app-unavailable-note');
+        if (!aur) {
+            if (!note) {
+                note = document.createElement('span');
+                note.className = 'app-desc app-unavailable-note';
+                card.appendChild(note);
+            }
+            note.textContent = 'Not available: ' + label + ' has no AUR.';
+        } else if (note) {
+            note.remove();
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', applyGeneratorOs);

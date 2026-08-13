@@ -74,6 +74,28 @@
                name that does not exist. */
             'amd-ucode': 'sys-kernel/linux-firmware',
             'cronie': 'sys-process/cronie',
+            'opendoas': 'app-admin/doas',
+            'ttf-jetbrains-mono': 'media-fonts/jetbrains-mono',
+            /* One package on Gentoo where Arch splits the plain font from its
+               patched form; the ebuild builds the Nerd Fonts variants. */
+            'ttf-jetbrains-mono-nerd': 'media-fonts/nerdfonts',
+            'base-devel': null,        // Gentoo's toolchain is in the stage3
+            'terminus-font': 'media-fonts/terminus-font',
+            'apparmor': 'sys-apps/apparmor',
+            'usbguard': 'sys-apps/usbguard',
+            'audit': 'sys-process/audit',
+            'fail2ban': 'net-analyzer/fail2ban',
+            'lynis': 'app-forensics/lynis',
+            'unbound': 'net-dns/unbound',
+            'dnscrypt-proxy': 'net-dns/dnscrypt-proxy',
+            'bind': 'net-dns/bind',
+            'dnsmasq': 'net-dns/dnsmasq',
+            'stubby': 'net-dns/stubby',
+            'sbsigntools': 'app-crypt/sbsigntools',
+            'efitools': 'app-crypt/efitools',
+            /* Distributed as a signed binary by its vendor rather than built
+               from source, so there is no ebuild that could be honest here. */
+            'shim-signed': null,
             'sysklogd': 'app-admin/sysklogd',
             'dbus': 'sys-apps/dbus',
             'os-prober': 'sys-boot/os-prober',
@@ -89,6 +111,73 @@
             'docker': 'app-containers/docker',
             'git': 'dev-vcs/git',
 
+            /* The post-install application set. Every one of these is an atom
+               from packages.gentoo.org rather than the bare name: `emerge vim`
+               and `emerge app-editors/vim` are not reliably the same request. */
+            'neovim': 'app-editors/neovim',
+            'ripgrep': 'sys-apps/ripgrep',
+            'fd': 'sys-apps/fd',
+            'alacritty': 'x11-terms/alacritty',
+            'kitty': 'x11-terms/kitty',
+            'zsh-completions': 'app-shells/zsh-completions',
+            'gvfs': 'gnome-base/gvfs',
+            'thunar-volman': 'xfce-extra/thunar-volman',
+            'obs-studio': 'media-video/obs-studio',
+            'keepassxc': 'app-admin/keepassxc',
+            'flatpak': 'sys-apps/flatpak',
+            'tmux': 'app-misc/tmux',
+            'htop': 'sys-process/htop',
+            'nautilus': 'gnome-base/nautilus',
+            'vlc': 'media-video/vlc',
+            'gimp': 'media-gfx/gimp',
+            'libreoffice-fresh': 'app-office/libreoffice',
+            'bluez': 'net-wireless/bluez',
+            /* One package here, where Arch splits the daemon from its tools. */
+            'bluez-utils': null,
+            'pipewire': 'media-video/pipewire',
+            /* PulseAudio and ALSA compatibility are USE flags on the one
+               package rather than separate packages, so naming them would
+               emerge nothing. Turn on `sound-server`, `pulseaudio` and `alsa`
+               on media-video/pipewire instead. */
+            'pipewire-pulse': null,
+            'pipewire-alsa': null,
+            'wireplumber': 'media-video/wireplumber',
+            'clamav': 'app-antivirus/clamav',
+            'firejail': 'sys-apps/firejail',
+            /* A pacman hook, so there is nothing to install. Snapper's own
+               portage integration is a Portage hook script instead. */
+            'snap-pac': null,
+            'grub-btrfs': 'sys-fs/grub-btrfs',
+            'pfetch': 'app-misc/pfetch',
+            'fastfetch': 'app-misc/fastfetch',
+            'usbutils': 'sys-apps/usbutils',
+            'timeshift': 'app-backup/timeshift',
+            'tor-browser': 'www-client/torbrowser-launcher',
+            'signal-desktop': 'net-im/signal-desktop-bin',
+
+            /* Desktops and display servers. */
+            'gnome': 'gnome-base/gnome',
+            'gnome-tweaks': 'gnome-extra/gnome-tweaks',
+            'gdm': 'gnome-base/gdm',
+            'plasma-desktop': 'kde-plasma/plasma-meta',
+            'sddm': 'x11-misc/sddm',
+            'xorg-server': 'x11-base/xorg-server',
+            'xorg-xinit': 'x11-apps/xinit',
+            'xorg-xwayland': 'x11-base/xwayland',
+            'wayland': 'dev-libs/wayland',
+            'libx11': 'x11-libs/libX11',
+            'libxinerama': 'x11-libs/libXinerama',
+            'libxft': 'x11-libs/libXft',
+            'hyprland': 'gui-wm/hyprland',
+            'waybar': 'gui-apps/waybar',
+            'rofi': 'x11-misc/rofi',
+
+            /* Debian's unattended upgrades and the AUR's usbkill have no
+               Gentoo counterpart; the equivalents are a Portage cron job and
+               the USB guard tools already offered. */
+            'unattended-upgrades': null,
+            'usbkill': null,
+
             /* No equivalent. The emitters check for null and explain the
                absence instead of substituting something that merely sounds
                similar. */
@@ -96,6 +185,31 @@
             'zram-generator': null     // Gentoo configures zram through its own init scripts
         }
     };
+
+    /* ── Packages that exist, but not in the main tree ──────────────────────
+       An ebuild in an overlay is not the same offer as one in the tree: it has
+       to be enabled first, and it is maintained by someone else. Emitting a
+       bare `emerge` for one of these would fail with "no ebuilds to satisfy",
+       which reads as the guide being wrong rather than the repository being
+       absent — so the guide names the overlay and how to add it instead.
+
+       `eselect repository` comes from app-eselect/eselect-repository. */
+    var PKG_OVERLAY = {
+        gentoo: {
+            'librewolf': { repo: 'librewolf', atom: 'www-client/librewolf',
+                           note: "the LibreWolf project's own overlay" },
+            'vscodium': { repo: 'guru', atom: 'app-editors/vscodium',
+                          note: 'GURU, the user-contributed repository' },
+            'ungoogled-chromium': { repo: 'guru', atom: 'www-client/ungoogled-chromium',
+                                    note: 'GURU, the user-contributed repository' }
+        }
+    };
+
+    /** Where a package lives when it is not in the main tree, or null. */
+    function pkgOverlay(os, name) {
+        var table = PKG_OVERLAY[os];
+        return (table && table[name]) || null;
+    }
 
     /** Translate one Arch package name for the target system. */
     function pkgName(os, name) {
@@ -181,7 +295,22 @@
             install: function (pkgs) {
                 return 'pacman -S --needed --noconfirm ' + pkgs.join(' ');
             },
+            /* The same request without "skip what is already there". Both forms
+               are in the emitters and the difference is not decorative: the
+               plain form reinstalls, which is what you want when a package has
+               to be rebuilt against something that changed under it. On Gentoo
+               the same distinction is `--noreplace` or not. */
+            installPlain: function (pkgs) {
+                return 'pacman -S --noconfirm ' + pkgs.join(' ');
+            },
             upgrade: 'pacman -Syu --noconfirm',
+            /* Remove without walking the dependency graph. Used in exactly one
+               place — replacing sudo with a doas wrapper, where the point is
+               that everything depending on sudo keeps working through the
+               wrapper. It is a sharp tool and the emitters treat it as one. */
+            removeNoDeps: function (pkgs) {
+                return 'pacman -Rdd --noconfirm ' + pkgs.join(' ');
+            },
             chroot: 'arch-chroot /mnt',
             fstab: 'genfstab -U /mnt >> /mnt/etc/fstab',
             initramfs: 'mkinitcpio -P'
@@ -209,7 +338,16 @@
             install: function (pkgs) {
                 return 'emerge --verbose --noreplace ' + pkgs.join(' ');
             },
+            installPlain: function (pkgs) {
+                return 'emerge --verbose ' + pkgs.join(' ');
+            },
             upgrade: 'emerge --verbose --update --deep --changed-use @world',
+            /* Portage's equivalent. `--unmerge` removes the package without
+               consulting what depends on it, which is the same sharp edge
+               pacman's `-Rdd` has and the same reason it is used here. */
+            removeNoDeps: function (pkgs) {
+                return 'emerge --unmerge --quiet ' + pkgs.join(' ');
+            },
             /* Gentoo has no arch-chroot wrapper: the bind mounts are done by
                hand first, then a plain chroot. Listed rather than folded into
                one string because each line is a separate failure point and the
@@ -244,7 +382,65 @@
                 unpack: function (file) {
                     return 'tar xpvf ' + file + " --xattrs-include='*.*' " +
                            '--numeric-owner -C /mnt/gentoo';
+                },
+                /* The stage3 answer names an autobuilds directory, and it also
+                   settles the init system and the libc — which is why there is
+                   no separate profile question. Picking `systemd` here and an
+                   OpenRC profile later is the most common way a first Gentoo
+                   install goes wrong, so one answer decides both and the
+                   profile step below is told which number to look for. */
+                dirs: {
+                    'openrc': 'current-stage3-amd64-openrc',
+                    'systemd': 'current-stage3-amd64-systemd',
+                    'hardened-openrc': 'current-stage3-amd64-hardened-openrc',
+                    'musl': 'current-stage3-amd64-musl'
+                },
+                dirFor: function (variant) {
+                    return this.dirs[variant] || this.dirs.openrc;
+                },
+                /* Which init the tarball carries, so a caller does not have to
+                   parse the variant name to find out. */
+                initFor: function (variant) {
+                    return variant === 'systemd' ? 'systemd' : 'openrc';
                 }
+            },
+
+            /* ── The answers that become make.conf ──────────────────────────
+               Held here rather than in either front end because both emit them
+               and they must not drift. A build job wants roughly 2 GB of RAM
+               when it links, so the job count is a memory decision as much as a
+               speed one. */
+            makeopts: {
+                nproc: '-j$(nproc)',
+                half: '-j$(( $(nproc) / 2 ))',
+                '1': '-j1'
+            },
+            useSets: {
+                profile: '',
+                desktop: 'USE="elogind dbus policykit -systemd"',
+                minimal: 'USE="-X -wayland -bluetooth -pulseaudio -gtk -qt5"'
+            },
+
+            /* The three kernel routes, in the order of how much work they are.
+               `manual` is the reason people run Gentoo and also the way a first
+               install fails to boot; `bin` is a pre-built binary kernel and is
+               the honest recommendation for a first attempt. */
+            kernelPkgs: {
+                manual: ['sys-kernel/gentoo-sources', 'sys-apps/pciutils'],
+                dist: ['sys-kernel/gentoo-kernel'],
+                bin: ['sys-kernel/gentoo-kernel-bin']
+            },
+
+            /* Gentoo has no mkinitcpio. Dracut arrives through installkernel's
+               USE flag and rebuilds itself whenever a kernel is installed,
+               which is why `initramfs` above is null rather than a command:
+               there is nothing to run by hand in the ordinary case. */
+            dracut: {
+                enable: [
+                    'echo "sys-kernel/installkernel dracut" >> /etc/portage/package.use/installkernel',
+                    'emerge --verbose --noreplace sys-kernel/installkernel'
+                ],
+                cryptModules: 'add_dracutmodules+=" crypt dm rootfs-block "'
             }
         }
     };
@@ -354,5 +550,6 @@
     root.osPkgName = pkgName;
     root.osPkgNames = pkgNames;
     root.osPkgUnavailable = pkgUnavailable;
+    root.osPkgOverlay = pkgOverlay;
 
 })(typeof window !== 'undefined' ? window : this);
