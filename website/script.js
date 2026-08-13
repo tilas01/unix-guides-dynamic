@@ -3236,20 +3236,37 @@ run_with_progress() {
             }
         }
 
-        // ── Download Cheatsheets ──
+        /* The cheatsheet for the system being installed, not Arch's under
+           another system's name. `CHEATSHEETS` names the file per system; a
+           system with no sheet of its own gets none rather than Arch's, which
+           would be the same wrong-commands-under-the-wrong-heading problem in a
+           file the reader keeps. */
+        /* No metadata at all means nothing was selected, which resolves to Arch
+           everywhere else on this page; its sheet follows. */
+        const cheatFile = osMeta ? (osMeta.cheatsheet || null) : 'arch-commands.md';
+        const rawBase = 'https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/docs/cheatsheets/';
         if (cmdOnly) {
             o += `\n# Downloading Cheatsheets\n`;
             o += `mkdir -p /home/$u1/cheatsheets\n`;
-            o += `curl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/docs/cheatsheets/arch-commands.md" -o /home/$u1/cheatsheets/arch-commands.md\n`;
+            if (cheatFile) {
+                o += `curl -sL "${rawBase}${cheatFile}" -o /home/$u1/cheatsheets/${cheatFile}\n`;
+            } else {
+                o += `# No ${osLabel} cheatsheet is written yet, and Arch's would be wrong here.\n`;
+            }
             if (desktop === 'dusky') {
-                o += `curl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/docs/cheatsheets/duskyos-hyprland.md" -o /home/$u1/cheatsheets/duskyos-hyprland.md\n`;
+                o += `curl -sL "${rawBase}duskyos-hyprland.md" -o /home/$u1/cheatsheets/duskyos-hyprland.md\n`;
             }
             o += `chown -R $u1:$u1 /home/$u1/cheatsheets\n`;
             o += emitWallpapers('/home/$u1/Pictures/wallpapers', '$u1');
         } else {
-            o += `\n### 11. Download Cheatsheets\n\`\`\`bash\nmkdir -p ~/cheatsheets\ncurl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/docs/cheatsheets/arch-commands.md" -o ~/cheatsheets/arch-commands.md\n`;
+            o += `\n### 11. Download Cheatsheets\n\`\`\`bash\nmkdir -p ~/cheatsheets\n`;
+            if (cheatFile) {
+                o += `curl -sL "${rawBase}${cheatFile}" -o ~/cheatsheets/${cheatFile}\n`;
+            } else {
+                o += `# No ${osLabel} cheatsheet is written yet, and Arch's would be wrong here.\n`;
+            }
             if (desktop === 'dusky') {
-                o += `curl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/docs/cheatsheets/duskyos-hyprland.md" -o ~/cheatsheets/duskyos-hyprland.md\n`;
+                o += `curl -sL "${rawBase}duskyos-hyprland.md" -o ~/cheatsheets/duskyos-hyprland.md\n`;
             }
             o += `\`\`\`\n`;
             const wpBlock = emitWallpapers('~/Pictures/wallpapers', null);

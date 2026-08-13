@@ -50,6 +50,17 @@
             border-bottom-color: var(--accent-yellow);
             font-weight: bold;
         }
+        /* The sheet for the system selected in the header. Marked rather than
+           hidden-and-swapped: the other systems stay reachable, and a reader
+           comparing two of them can see which one is theirs. The dot carries
+           the meaning for anyone who cannot distinguish the tint. */
+        .cs-tab[data-current-os]::after {
+            content: " \25CF";
+            color: var(--accent-cyan);
+        }
+        .cs-tab[data-current-os] {
+            border-color: var(--accent-cyan);
+        }
 
         .cs-meta {
             display: flex;

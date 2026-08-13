@@ -48,6 +48,14 @@
                scripts/gen-icons.py under these names, at
                img/icons/<slug>-<size>.png and img/banners/<slug>.png. */
             slug: 'arch-guides',
+            /* The system's own cheatsheet, under docs/cheatsheets/. Read by the
+               cheatsheets page for its tabs and by the generator for the copy
+               it downloads into the new machine's home directory, so the file
+               is named once. A system without one gets no cheatsheet rather
+               than another system's: a sheet of pacman commands saved on a
+               Gentoo box is the same wrong-tooling defect in a file that
+               outlives the install. */
+            cheatsheet: 'arch-commands.md',
             accent: 'cyan',
             summary: 'pacman, systemd, LUKS2.',
             desc: 'Complete, and the default. pacman, systemd, LUKS2. The Arch ' +
@@ -60,6 +68,7 @@
             docs: 'https://wiki.gentoo.org/wiki/Handbook:AMD64',
             docsName: 'the Gentoo Handbook',
             slug: 'gentoo-guides',
+            cheatsheet: 'gentoo-commands.md',
             accent: 'purple',
             summary: 'stage3, portage, USE flags.',
             desc: 'Source-based: a stage3 tarball, portage with USE flags, and ' +

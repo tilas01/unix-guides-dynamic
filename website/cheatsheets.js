@@ -16,12 +16,44 @@
 
 (function () {
 
-    /* Tab order is deliberate: the two purpose-built cheatsheets first, then
-       the long combined reference, then the desktop-specific ones. */
-    var SHEETS = [
-        { id: 'arch',    label: '📦 Arch commands',
-          file: 'docs/cheatsheets/arch-commands.md',
-          desc: 'pacman, the AUR, systemd, Btrfs snapshots and the security suite.' },
+    /* Tab order: the per-system sheets first, then the long combined
+       reference, then the desktop-specific ones.
+
+       `os` marks a sheet as belonging to one system. Those are all shown — a
+       reader comparing two systems is a reader this page should help — but the
+       one matching the current selection opens first and is marked as such, so
+       the page answers the question actually being asked without hiding the
+       others. A sheet with no `os` is shared and applies everywhere. */
+    /* Which file belongs to which system comes from os-meta.js, so adding a
+       system's cheatsheet there puts a tab here without touching this file —
+       and so this page and the generated install cannot disagree about which
+       sheet a Gentoo reader gets. The label and blurb stay here because they
+       are about this page rather than about the system. */
+    var OS_SHEET_TEXT = {
+        arch:   { label: '📦 Arch commands',
+                  desc: 'pacman, the AUR, systemd, Btrfs snapshots and the security suite.' },
+        gentoo: { label: '🐧 Gentoo commands',
+                  desc: 'Portage, USE flags, profiles, the three kernel routes, dracut, and OpenRC beside systemd.' }
+    };
+
+    function osSheets() {
+        var meta = (typeof window !== 'undefined' && window.OS_META) || {};
+        var out = [];
+        Object.keys(meta).forEach(function (id) {
+            if (!meta[id].cheatsheet) return;      // no sheet written yet
+            var text = OS_SHEET_TEXT[id] || {};
+            out.push({
+                id: id,
+                os: id,
+                label: text.label || meta[id].label + ' commands',
+                file: 'docs/cheatsheets/' + meta[id].cheatsheet,
+                desc: text.desc || ('Commands for ' + meta[id].label + '.')
+            });
+        });
+        return out;
+    }
+
+    var SHEETS = osSheets().concat([
         { id: 'dusky',   label: '🌙 Dusky / Hyprland',
           file: 'docs/cheatsheets/duskyos-hyprland.md',
           desc: 'Every keybind, the advanced commands, and what to do when it misbehaves.' },
@@ -31,7 +63,16 @@
         { id: 'duskyq',  label: '⚡ Dusky quick card',
           file: 'docs/dusky-cheatsheet.md',
           desc: 'The short version, for printing or keeping on a second screen.' }
-    ];
+    ]);
+
+    /* The sheet for the system the reader has selected, or the first one when
+       that system has no sheet of its own yet. Read at open time rather than
+       cached, because the header switcher can change it under us. */
+    function sheetForSelectedOs() {
+        var key = (typeof window.targetOS === 'function') ? window.targetOS() : 'arch';
+        var match = SHEETS.filter(function (s) { return s.os === key; })[0];
+        return match || SHEETS[0];
+    }
 
     var cache = {};   // file -> raw markdown, so switching tabs refetches nothing
 
@@ -161,12 +202,43 @@
             next.click();
         });
 
+        /* An explicit ?sheet= wins, because it is what a shared link means.
+           Otherwise open the one for the selected system. */
         var want = null;
         try { want = new URL(location.href).searchParams.get('sheet'); } catch (_) { /* ignore */ }
-        var start = SHEETS.filter(function (s) { return s.id === want; })[0] || SHEETS[0];
+        var start = SHEETS.filter(function (s) { return s.id === want; })[0] || sheetForSelectedOs();
+        markSelectedOs();
         show(start);
 
+        /* Switching system from the header re-points the page at that system's
+           sheet, unless the reader has since chosen a different tab by hand —
+           moving them off a sheet they deliberately opened would be the page
+           arguing with them. */
+        document.addEventListener('unix:os-changed', function () {
+            markSelectedOs();
+            var current = document.querySelector('.cs-tab.active');
+            var currentId = current && current.getAttribute('data-sheet');
+            var currentSheet = SHEETS.filter(function (s) { return s.id === currentId; })[0];
+            if (currentSheet && !currentSheet.os) return;   // a shared sheet: leave it
+            show(sheetForSelectedOs());
+        });
+
         if (typeof window.refreshTooltips === 'function') window.refreshTooltips();
+    }
+
+    /* Say which tab belongs to the system currently selected. Without this the
+       tabs read as five equal options and nothing connects the page to the
+       choice made in the header. */
+    function markSelectedOs() {
+        var mine = sheetForSelectedOs();
+        [].forEach.call(document.querySelectorAll('.cs-tab'), function (b) {
+            var id = b.getAttribute('data-sheet');
+            var sheet = SHEETS.filter(function (s) { return s.id === id; })[0];
+            var isMine = !!(sheet && sheet.os && sheet.id === mine.id);
+            b.classList.toggle('cs-tab-current-os', isMine);
+            if (isMine) b.setAttribute('data-current-os', 'yes');
+            else b.removeAttribute('data-current-os');
+        });
     }
 
     if (document.readyState === 'loading') {

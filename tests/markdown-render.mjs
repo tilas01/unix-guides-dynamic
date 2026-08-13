@@ -266,8 +266,29 @@ for (const doc of seenPages) {
        `?page=${doc} is linked but website/${rel.split(path.sep).join('/')} does not exist`);
 }
 
-/* Every ?sheet= target must be a real tab in cheatsheets.js. */
+/* Every ?sheet= target must be a real tab on the cheatsheets page.
+ *
+ * Tabs come from two places, and the gate has to read both or it reports a
+ * working link as broken. The shared sheets are literal entries in
+ * cheatsheets.js; the per-system ones are built at load time from os-meta.js,
+ * one tab for every system that names a `cheatsheet:` file — so that a system's
+ * sheet is written down once and the generated install and this page cannot
+ * disagree about which file a reader gets. The tab id is the system id. */
 const sheetIds = new Set([...read('cheatsheets.js').matchAll(/\{\s*id:\s*'([\w-]+)'/g)].map(m => m[1]));
+/* Walked line by line rather than matched with one expression. A single lazy
+   regex spanning from an id to a `cheatsheet:` will happily cross out of an
+   entry that has no cheatsheet and into the next one that does, so the gate
+   would then approve a link to a tab that is never built. Tracking which entry
+   is open cannot make that mistake. */
+{
+    let openId = null;
+    for (const line of read('os-meta.js').split('\n')) {
+        const entry = line.match(/^\s{8}(\w+):\s*\{/);
+        if (entry) { openId = entry[1]; continue; }
+        if (openId && /^\s{8}\},?\s*$/.test(line)) { openId = null; continue; }
+        if (openId && /cheatsheet:\s*'[\w.-]+'/.test(line)) sheetIds.add(openId);
+    }
+}
 const SHEET_RE = /[?&]sheet=([\w-]+)/g;
 for (const f of fs.readdirSync(WEB).filter(x => /\.(html|js)$/.test(x))) {
     for (const m of stripComments(read(f)).matchAll(SHEET_RE)) {
