@@ -1997,18 +1997,39 @@ run_with_progress() {
             const dnsMode = gv('dns_ipv4_only', 'no') === 'yes' ? 'ipv4' : 'both';
             o += `\n# Encrypted DNS — ${dnsProv.label}, DNS-over-TLS with the\n`;
             o += `# certificate name pinned, plus DNSSEC.\n`;
+            /* Two resolvers both wanting port 53 is a conflict the reader will
+               otherwise meet as "DNS stopped working after a reboot", with
+               nothing on screen connecting it to two answers given minutes
+               apart. Named here rather than left to be discovered. */
+            if (dns !== 'systemd-resolved') {
+                o += `# NOTE: you also chose ${dns} as the resolver daemon. Both it and the\n`;
+                o += `# stub configured here want port 53 — run one, or point ${dns} at the\n`;
+                o += `# stub as its upstream. Two listeners on 53 is a conflict that shows\n`;
+                o += `# up as DNS failing after the next reboot.\n`;
+            }
             /* Writing a resolved drop-in on a machine with no resolved is
                encrypted DNS that is configured, looks configured and never runs
                — the defect class this repository exists to remove. Stubby is
                the daemon that does the same job under OpenRC, and tls_auth_name
                is its spelling of the certificate pin. */
             if (openrc) {
+                /* Stubby is what carries the encryption here, so it has to be
+                   present whichever resolver daemon was chosen above. When the
+                   answer was systemd-resolved it was already installed there;
+                   when it was unbound or dnsmasq it was not, and writing a
+                   config for a daemon that is not installed is the same
+                   never-runs failure this branch exists to avoid. */
+                if (dns !== 'systemd-resolved') {
+                    o += `${instNeeded(['stubby'])}\n${svc('stubby')}\n`;
+                }
                 o += `mkdir -p /etc/stubby\n`;
                 o += `cat > /etc/stubby/stubby.yml << 'DNSCONF'\n`;
                 window.DnsProviders.buildStubbyConf(dnsProv, dnsMode)
                     .forEach(line => { o += `${line}\n`; });
                 o += `DNSCONF\n`;
-                o += `${svc('stubby')}\n`;
+                /* Already enabled where the resolver daemon was chosen; a
+                   second rc-update for the same script is noise in a guide
+                   people read line by line. */
                 o += `printf 'nameserver 127.0.0.1\\noptions edns0\\n' > /etc/resolv.conf\n`;
                 o += `chattr +i /etc/resolv.conf   # stop DHCP replacing it\n`;
             } else {
@@ -5596,7 +5617,28 @@ function applyGeneratorOs() {
         sub.style.color = m.complete === false ? 'var(--accent-orange)' : '';
     }
     applyAurAvailability();
+    applyOsOnlyQuestions();
     refreshDocumentTitle();
+}
+
+/* Questions that belong to one system only.
+ *
+ * The walkthrough gates these with a `when` predicate and simply never asks
+ * them elsewhere. This form has no such machinery, so the markup carries
+ * `data-os` and the group is hidden when another system is selected — the same
+ * decision, expressed where this front end can act on it.
+ *
+ * The controls stay in the DOM rather than being removed, so their answers are
+ * still read into the saved configuration. That matters for the round trip: a
+ * config exported while Gentoo was selected has to survive being loaded, looked
+ * at under Arch, and saved again.
+ */
+function applyOsOnlyQuestions() {
+    const key = (typeof window.targetOS === 'function') ? window.targetOS() : 'arch';
+    document.querySelectorAll('[data-os]').forEach(function (group) {
+        const only = (group.getAttribute('data-os') || '').split(/\s+/).filter(Boolean);
+        group.hidden = only.length > 0 && only.indexOf(key) === -1;
+    });
 }
 
 /* Options that only exist because Arch has an AUR.

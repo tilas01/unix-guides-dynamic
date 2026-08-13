@@ -76,6 +76,18 @@
         { wl: 'wallpaper_count',  gen: 'wallpaper_count',  group: 'selects' },
         { wl: 'wallpaper_split',  gen: 'wallpaper_split',  group: 'selects' },
 
+        /* Gentoo's own five. Identical ids and identical option values on both
+           sides, on purpose — a value table here would be somewhere for the two
+           to disagree about what "half the cores" means, and these decide how
+           the machine is built rather than how it looks. They carry across even
+           when the target is not Gentoo, so a config exported from a Gentoo
+           session survives being opened, read and saved elsewhere. */
+        { wl: 'gentoo_stage3',    gen: 'gentoo_stage3',    group: 'selects' },
+        { wl: 'gentoo_kernel',    gen: 'gentoo_kernel',    group: 'selects' },
+        { wl: 'gentoo_binpkgs',   gen: 'gentoo_binpkgs',   group: 'selects' },
+        { wl: 'gentoo_makeopts',  gen: 'gentoo_makeopts',  group: 'selects' },
+        { wl: 'gentoo_use',       gen: 'gentoo_use',       group: 'selects' },
+
         /* Duress PINs. The two front ends model this differently and only three
            states have an exact equivalent, so only those three are carried.
            `wlIsList` says the walkthrough side is an array of one.

@@ -379,6 +379,57 @@
                         </select>
                     </div>
 
+                    <!-- Gentoo's own questions. Shown only when Gentoo is the
+                         selected system, the same way the walkthrough gates
+                         them, because they mean nothing anywhere else. The
+                         Handbook is the authority for every one:
+                         https://wiki.gentoo.org/wiki/Handbook:AMD64 -->
+                    <div class="form-group form-step" data-os="gentoo" hidden data-title="🐧 Stage3 Tarball" data-desc="The base system is a signed tarball, not a package transaction. This choice also decides the init system and the profile." oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;">
+                        <label for="gentoo_stage3">Stage3 tarball:</label>
+                        <select oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;" id="gentoo_stage3">
+                            <option value="openrc" selected>openrc — Gentoo's own init (recommended)</option>
+                            <option value="systemd">systemd — closest to Arch</option>
+                            <option value="hardened-openrc">hardened (OpenRC) — more defence, more friction</option>
+                            <option value="musl">musl — smaller libc, smaller ecosystem</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-step" data-os="gentoo" hidden data-title="🐧 Kernel Build" data-desc="Gentoo ships no kernel by default. These are genuinely different amounts of work, and only the first is a sensible first install." oncontextmenu="window.open('wiki.html#gentoo-kernel', '_blank'); return false;">
+                        <label for="gentoo_kernel">How the kernel is built:</label>
+                        <select oncontextmenu="window.open('wiki.html#gentoo-kernel', '_blank'); return false;" id="gentoo_kernel">
+                            <option value="bin" selected>gentoo-kernel-bin — prebuilt (recommended)</option>
+                            <option value="dist">gentoo-kernel — Gentoo's config, compiled here</option>
+                            <option value="manual">gentoo-sources — you run menuconfig</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-step" data-os="gentoo" hidden data-title="🐧 Binary Packages" data-desc="Compiling everything is the reason to run Gentoo; compiling a browser is the reason people stop. --getbinpkg is a supported workflow, not a shortcut." oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;">
+                        <label for="gentoo_binpkgs">Binary packages:</label>
+                        <select oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;" id="gentoo_binpkgs">
+                            <option value="big" selected>Only for the big ones (recommended)</option>
+                            <option value="none">Never — build everything from source</option>
+                            <option value="all">Prefer binaries wherever published</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-step" data-os="gentoo" hidden data-title="🐧 Parallel Build Jobs" data-desc="Each job can want around 2 GB of RAM when it links, so many cores with little RAM meets the OOM killer partway through a long build." oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;">
+                        <label for="gentoo_makeopts">Parallel build jobs:</label>
+                        <select oncontextmenu="window.open('wiki.html#gentoo-install', '_blank'); return false;" id="gentoo_makeopts">
+                            <option value="nproc" selected>One per core — $(nproc) (recommended)</option>
+                            <option value="half">Half the cores — safer on 8 GB or less</option>
+                            <option value="1">One job — slowest, always finishes</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-step" data-os="gentoo" hidden data-title="🐧 USE Flags" data-desc="USE decides which optional features are compiled in at all, not merely which are enabled. Adding one back later means rebuilding what depends on it." oncontextmenu="window.open('wiki.html#gentoo-use-flags', '_blank'); return false;">
+                        <label for="gentoo_use">USE flags:</label>
+                        <select oncontextmenu="window.open('wiki.html#gentoo-use-flags', '_blank'); return false;" id="gentoo_use">
+                            <option value="profile" selected>Whatever the profile sets (recommended)</option>
+                            <option value="desktop">Profile plus a desktop set</option>
+                            <option value="minimal">Deliberately minimal — for a server</option>
+                        </select>
+                    </div>
+
                     <div class="form-group form-step" data-title="⚙️ Bootloader Choice" data-desc="UKI Custom uses your own keys in UEFI. UKI Shim uses Microsoft trust chain. systemd-boot is minimal. GRUB is legacy." oncontextmenu="window.open('wiki.html#bootloader', '_blank'); return false;">
                         <label for="bootloader">Bootloader &amp; Secure Boot:</label>
                         <select oncontextmenu="window.open('wiki.html#' + this.id, '_blank'); return false;" id="bootloader">
