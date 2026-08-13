@@ -53,6 +53,13 @@
         { wl: 'dualboot',           gen: 'dualboot',           group: 'selects' },
         { wl: 'dualboot_esp_mode',  gen: 'dualboot_esp_mode',  group: 'selects' },
         { wl: 'dualboot_esp',       gen: 'dualboot_esp',       group: 'inputs'  },
+        /* Order, ownership and the default entry. Same ids and same option
+           values on both sides. These decide whether the other operating system
+           still appears in the boot menu afterwards, so losing one in
+           translation is not a cosmetic difference. */
+        { wl: 'dualboot_order',     gen: 'dualboot_order',     group: 'selects' },
+        { wl: 'dualboot_owner',     gen: 'dualboot_owner',     group: 'selects' },
+        { wl: 'dualboot_default',   gen: 'dualboot_default',   group: 'selects' },
         { wl: 'bootloader',     gen: 'bootloader',      group: 'selects' },
         { wl: 'desktop',        gen: 'desktop',         group: 'selects' },
         { wl: 'display_server', gen: 'display_server',  group: 'selects' },

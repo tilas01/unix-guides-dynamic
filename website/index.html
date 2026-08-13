@@ -228,6 +228,47 @@
                         </div>
                     </div>
 
+                    <!-- Boot order and ownership. Three separate decisions that
+                         are easy to conflate: which install happens first, which
+                         bootloader draws the menu, and which entry is selected
+                         when nobody touches the keyboard. Getting the second one
+                         wrong is how a working machine boots straight into one
+                         system with no way to reach the other. -->
+                    <div class="form-group form-step" id="dualboot-order-group" hidden oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" data-title="Install Order" data-desc="Whether this system goes on first or second. Installing first means leaving unpartitioned space for the other one now, because taking it back later means shrinking a filesystem.">
+                        <label for="dualboot_order">Which install is this?</label>
+                        <select oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" id="dualboot_order">
+                            <option value="second" selected>Second — the other system is already installed</option>
+                            <option value="first">First — leave space for the other system</option>
+                        </select>
+                        <div style="font-size:0.75rem; color:var(--accent-orange); margin-top:0.4rem;">
+                            Going first is the easier order when both systems are yours: the
+                            second installer finds free space instead of you shrinking a
+                            filesystem that is already full of data.
+                        </div>
+                    </div>
+
+                    <div class="form-group form-step" id="dualboot-owner-group" hidden oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" data-title="Which Bootloader Owns the Menu" data-desc="One bootloader draws the menu the firmware lands on. Installing a second one that does not know about the first is the usual way the other system disappears.">
+                        <label for="dualboot_owner">Which bootloader shows the boot menu?</label>
+                        <select oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" id="dualboot_owner">
+                            <option value="this" selected>This system's — it detects the other</option>
+                            <option value="existing">The existing system's — add an entry there instead</option>
+                        </select>
+                        <div style="font-size:0.75rem; color:var(--accent-orange); margin-top:0.4rem;">
+                            Choosing <em>the existing system's</em> means this guide installs no
+                            bootloader: you finish by running that system's own
+                            <code>grub-mkconfig</code> (or equivalent) so it picks this one up.
+                            Whichever you choose, only one bootloader should own the menu.
+                        </div>
+                    </div>
+
+                    <div class="form-group form-step" id="dualboot-default-group" hidden oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" data-title="Default Boot Entry" data-desc="Which system boots when the timeout runs out and nobody is at the keyboard.">
+                        <label for="dualboot_default">Which system boots by default?</label>
+                        <select oncontextmenu="window.open('wiki.html#dual-boot', '_blank'); return false;" id="dualboot_default">
+                            <option value="this" selected>This system</option>
+                            <option value="other">The other system</option>
+                        </select>
+                    </div>
+
 
 <div class="form-group form-step" data-title="⚙️ Disk Encryption" oncontextmenu="window.open('wiki.html#partitioning', '_blank'); return false;" data-desc="Your encryption is built up in layers: the container type, the cipher inside it, an optional post-quantum overlay, and an optional duress passphrase. Defaults are the recommended choice.">
     <label>🔐 Disk Encryption</label>

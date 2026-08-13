@@ -266,6 +266,84 @@ const STEPS = [
           desc: 'Reuses the ESP; you choose whether to share /home.' }
     ]
 },
+/* ── Dual boot: order, ownership, default ───────────────────────────────────
+   Three decisions that are easy to run together and are not the same. Which
+   install happens first decides whether space has to be left now; which
+   bootloader draws the menu decides whether this guide installs one at all;
+   and which entry is selected on a timeout decides what a machine does when
+   nobody is at the keyboard. Getting the middle one wrong is how a working
+   dual boot ends up booting straight into one system. */
+{
+    id: 'dualboot_order',
+    section: 'Before you start',
+    title: 'Is this the first install on this disk, or the second?',
+    help: 'Installing first means leaving unpartitioned space for the other ' +
+          'system now. Installing second means the other one is already there ' +
+          'and you shrink it to make room. First is the easier order when both ' +
+          'systems are yours, because the second installer finds free space ' +
+          'instead of you shrinking a filesystem that already holds your data.',
+    wiki: 'dual-boot',
+    when: s => s.dualboot && s.dualboot !== 'none',
+    type: 'choice',
+    options: [
+        { value: 'second', label: 'Second — the other system is already installed',
+          recommended: true,
+          desc: 'The usual case. Shrink the other system from its own tools ' +
+                'first, then this guide fills the free space.' },
+        { value: 'first', label: 'First — leave room for the other system',
+          desc: 'This system takes a fixed size and the rest of the disk is ' +
+                'left unpartitioned for the other installer to claim.' }
+    ],
+    note: s => s.dualboot_order === 'first'
+        ? 'Going first means there is no existing EFI partition to share and no ' +
+          'existing bootloader to hand the menu to, so those two questions ' +
+          'answer themselves: your own ESP, and your own bootloader.'
+        : ''
+},
+{
+    id: 'dualboot_owner',
+    section: 'Before you start',
+    title: 'Which bootloader shows the boot menu?',
+    help: 'One bootloader owns the menu the firmware lands on. Installing a ' +
+          'second one that does not know about the first is the usual way the ' +
+          'other operating system vanishes from the menu — the machine still ' +
+          'boots, just always into the same system.',
+    wiki: 'dual-boot',
+    when: s => s.dualboot && s.dualboot !== 'none' && s.dualboot_order !== 'first',
+    type: 'choice',
+    options: [
+        { value: 'this', label: 'This system\'s — it detects the other', recommended: true,
+          desc: 'GRUB with os-prober finds the other system and adds it. The ' +
+                'usual answer, and the only one that works when the other ' +
+                'system is Windows.' },
+        { value: 'existing', label: 'The existing system\'s — add an entry there',
+          desc: 'This guide installs no bootloader. You finish by booting the ' +
+                'other system and running its own grub-mkconfig so it picks ' +
+                'this one up.' }
+    ],
+    note: s => s.dualboot_owner === 'existing' && s.encryption && s.encryption !== 'none'
+        ? 'Your root volume is encrypted and os-prober does not look inside a ' +
+          'locked volume, so expect to write that menu entry by hand. The guide ' +
+          'prints the UUID you will need.'
+        : ''
+},
+{
+    id: 'dualboot_default',
+    section: 'Before you start',
+    title: 'Which system boots when nobody presses anything?',
+    help: 'The entry the menu falls back to when the timeout runs out. Worth ' +
+          'setting deliberately on a machine that reboots unattended.',
+    wiki: 'dual-boot',
+    when: s => s.dualboot && s.dualboot !== 'none',
+    type: 'choice',
+    options: [
+        { value: 'this', label: 'This system', recommended: true,
+          desc: 'The one you are installing now.' },
+        { value: 'other', label: 'The other system',
+          desc: 'Set through GRUB_DEFAULT=saved, which follows the entry ' +
+                'rather than its position in the menu.' }
+    ]
+},
 {
     id: 'dualboot_esp_mode',
     section: 'Before you start',

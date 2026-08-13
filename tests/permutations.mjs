@@ -142,10 +142,22 @@ function assertGuide(s, label) {
      * option, and would now forbid the arrangement the guide recommends.
      *
      * An absent `dualboot_esp_mode` means shared, matching the emitter, so a
-     * config saved before the question existed is still held to the old rule. */
+     * config saved before the question existed is still held to the old rule.
+     *
+     * Install order overrides it. Going on first means the other system is not
+     * there yet, so there is no partition of its own to share and the answer to
+     * the sharing question cannot be carried out whatever it says. The emitter
+     * resolves that the same way, and this has to agree or the gate demands an
+     * arrangement that cannot exist. */
     if (s.dualboot && s.dualboot !== 'none') {
         const espRe = new RegExp('mkfs\\.fat[^\\n]*' + s.dualboot_esp.replace(/\//g, '\\/'));
-        if (s.dualboot_esp_mode === 'separate') {
+        const goesFirst = s.dualboot_order === 'first';
+        if (goesFirst) {
+            ok(/leave the rest of the disk unpartitioned|unpartitioned/i.test(md),
+                `${label}: installed first but never says to leave space for the other system`);
+            ok(!/NOT formatted/.test(md),
+                `${label}: installed first, yet still says an existing ESP is shared`);
+        } else if (s.dualboot_esp_mode === 'separate') {
             ok(espRe.test(md),
                 `${label}: own ESP chosen but never formatted — it would be empty at boot`);
             ok(!/NOT formatted/.test(md),

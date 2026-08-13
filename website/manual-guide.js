@@ -75,8 +75,18 @@
            sees the other system's updates as changes. That is why the question
            exists rather than the answer being assumed. */
         const espShared = dual && s.dualboot_esp_mode !== 'separate';
+        /* Going on first means the other system is not there yet: nothing to
+           share, and no existing bootloader to hand the menu to. Forced here as
+           well as gated in the question, because answers can arrive from a
+           saved configuration rather than from the screen. */
+        const dualFirst = dual && s.dualboot_order === 'first';
         return {
-            espShared: espShared,
+            espShared: espShared && !dualFirst,
+            dualFirst: dualFirst,
+            /* Which bootloader draws the menu. Absent means this system's,
+               which is what this guide did before the question existed. */
+            dualOwner: dualFirst ? 'this' : (s.dualboot_owner || 'this'),
+            dualDefault: s.dualboot_default || 'this',
             arm: arm,
             enc: enc,
             disk: disk,
@@ -439,7 +449,26 @@
         L.push('lsblk                       # identify the disk by size and model. Twice.');
         L.push('```');
         L.push('');
-        if (f.dual) {
+        if (f.dual && f.dualFirst) {
+            L.push('This system is going on **first**, so nothing needs shrinking. Give it a');
+            L.push('fixed size and leave the rest of the disk unpartitioned — the other');
+            L.push('installer will find that free space and claim it.');
+            L.push('');
+            L.push('> Leave the room now. Taking it back later means shrinking a filesystem');
+            L.push('> that is full of your data, which is the work this ordering exists to');
+            L.push('> avoid.');
+            L.push('');
+            L.push('```bash');
+            L.push('gdisk ' + f.disk);
+            L.push('#   n → 1 → +512M → type ef00        # this system\'s own ESP');
+            L.push('#   n → 2 → a size you choose → type 8300');
+            L.push('#   w → write');
+            L.push('#');
+            L.push('# Do NOT give partition 2 the rest of the disk. Whatever is left');
+            L.push('# unpartitioned is what the other system gets.');
+            L.push('```');
+            L.push('');
+        } else if (f.dual) {
             L.push('You are keeping another operating system, so you are **adding** a');
             L.push('partition rather than repartitioning. Shrink the existing one from');
             L.push('that system\'s own tools first — Windows Disk Management, or GParted');
@@ -900,7 +929,47 @@
         const rootOpts = (f.enc ? 'rd.luks.name=$UUID=cryptroot root=/dev/mapper/cryptroot ' : 'root=UUID=$UUID ') +
                          (f.btrfs ? 'rootflags=subvol=@ ' : '') + 'rw';
 
-        if (f.arm) {
+        /* Handing the menu to the system that is already there means installing
+           no bootloader here at all. A second one that does not know about the
+           first is how the other operating system disappears from the menu —
+           the machine still boots, it just always boots the same thing. */
+        if (f.dual && f.dualOwner === 'existing') {
+            L.push('You chose to let **' + esc(s.dualboot) + '\'s** bootloader keep the menu,');
+            L.push('so none is installed here. This system supplies a kernel and an');
+            L.push('initramfs; the other one finds them.');
+            L.push('');
+            L.push('Finish this part from the **other** system, after this install:');
+            L.push('');
+            L.push('```bash');
+            L.push('# In the existing system, as root:');
+            L.push('echo GRUB_DISABLE_OS_PROBER=false >> /etc/default/grub');
+            L.push('grub-mkconfig -o /boot/grub/grub.cfg     # or: update-grub');
+            L.push('grep -c menuentry /boot/grub/grub.cfg    # expect more than one');
+            L.push('```');
+            L.push('');
+            L.push('> os-prober has been disabled by default since GRUB 2.06, so without');
+            L.push('> that first line the other system builds a menu that looks correct and');
+            L.push('> contains one entry.');
+            L.push('');
+            if (!f.espShared) {
+                L.push('> This system has its **own** EFI partition, so the other bootloader');
+                L.push('> will not find it by scanning its own. Mount this one where that');
+                L.push('> system can read it before running `grub-mkconfig`, or add the entry');
+                L.push('> by hand with `efibootmgr`.');
+                L.push('');
+            }
+            if (f.enc) {
+                L.push('> Your root volume is encrypted, and `os-prober` does not look inside');
+                L.push('> a locked volume. Expect to write the entry by hand. The value it');
+                L.push('> needs:');
+                L.push('');
+                L.push('```bash');
+                L.push(uuidCmd);
+                L.push('echo "cryptdevice=UUID=$UUID:cryptroot root=/dev/mapper/cryptroot"');
+                L.push('```');
+                L.push('');
+            }
+        } else if (f.arm) {
             if (s.arm_boot === 'rpi-firmware') {
                 L.push('The Raspberry Pi EEPROM bootloader reads `config.txt` and');
                 L.push('`cmdline.txt` from the FAT partition. There is no EFI stub involved.');
@@ -1038,10 +1107,27 @@
                 L.push('echo GRUB_DISABLE_OS_PROBER=false >> /etc/default/grub');
                 L.push('# os-prober is disabled by default since GRUB 2.06; without this');
                 L.push('# line the other operating system never appears in the menu.');
+                if (f.dualDefault === 'other') {
+                    /* A menu index moves the next time a kernel is added.
+                       `saved` follows the entry instead of its position. */
+                    L.push('echo GRUB_DEFAULT=saved >> /etc/default/grub');
+                    L.push('echo GRUB_SAVEDEFAULT=true >> /etc/default/grub');
+                    L.push('# Boots whatever was chosen last, so picking the other system once');
+                    L.push('# makes it the default. A fixed index would move on the next kernel.');
+                }
             }
             L.push('');
             L.push('grub-mkconfig -o /boot/grub/grub.cfg');
+            if (f.dual) {
+                L.push('grep -c menuentry /boot/grub/grub.cfg   # expect more than one');
+            }
             L.push('```');
+            if (f.dual) {
+                L.push('');
+                L.push('> If that count is 1, `os-prober` did not find the other system. The');
+                L.push('> usual causes are a hibernated Windows and an encrypted Linux root');
+                L.push('> that was locked while `grub-mkconfig` ran.');
+            }
         }
         L.push('');
 

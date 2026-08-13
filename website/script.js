@@ -978,6 +978,13 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
     const dualEspMode = gv('dualboot_esp_mode','separate');
     const dualEsp = gv('dualboot_esp','');
     const espShared = isDual && dualEspMode !== 'separate';
+    /* Going first means the other system is not there yet, so there is no
+       existing ESP to share and no existing bootloader to hand the menu to.
+       Forced here as well as in the form, because a configuration can arrive
+       from a file rather than from the controls. */
+    const dualFirst = isDual && gv('dualboot_order', 'second') === 'first';
+    const dualOwner = dualFirst ? 'this' : gv('dualboot_owner', 'this');
+    const dualDefault = gv('dualboot_default', 'this');
     /* Defaults match the walkthrough's recommended answers, so a config that
        omits them produces the same system from either front end. */
     const timezone = gv('timezone','Europe/London');
@@ -1432,8 +1439,19 @@ run_with_progress() {
                what is actually on the disk — a wrong path here is the
                difference between an install and a lost Windows partition. */
             o += `# Dual boot: ${dualboot}. The partition table is NOT wiped.\n`;
-            o += `# Shrink the other system's partition from that system's own tools\n`;
-            o += `# first, then create the partitions below in the free space.\n`;
+            if (dualFirst) {
+                /* Going first is the easier order and the reason to offer it:
+                   the second installer meets free space instead of the reader
+                   shrinking a filesystem that already holds their data. It only
+                   works if the space is left now — reclaiming it later is the
+                   shrink this ordering exists to avoid. */
+                o += `# This system goes on FIRST. The root partition below is sized to leave\n`;
+                o += `# room for ${dualboot}; the space stays unpartitioned until that\n`;
+                o += `# installer claims it.\n`;
+            } else {
+                o += `# Shrink the other system's partition from that system's own tools\n`;
+                o += `# first, then create the partitions below in the free space.\n`;
+            }
             if (dualboot === 'windows') {
                 /* These happen in Windows, before this script ever runs. They
                    are comments rather than commands for that reason — but
@@ -1462,7 +1480,23 @@ run_with_progress() {
                 o += `# Your own EFI partition, so the other system's is untouched.\n`;
                 o += `sgdisk -n 0:0:+512M -t 0:ef00 -c 0:"LINUXESP" ${disk}\n`;
             }
-            o += `sgdisk -n 0:0:0 -t 0:8300 ${disk}\n`;
+            if (dualFirst) {
+                /* Taking the rest of the disk is exactly what must not happen
+                   here. A variable checked before use reads as a blank to fill
+                   and stops the script rather than quietly consuming the space
+                   the other system was supposed to get. */
+                o += `# The size of THIS system's root partition. Everything after it is left\n`;
+                o += `# unpartitioned for ${dualboot}.\n`;
+                o += `THIS_SYSTEM_SIZE=""     # e.g. 200G\n`;
+                o += `if [ -z "$THIS_SYSTEM_SIZE" ]; then\n`;
+                o += `    echo "Set THIS_SYSTEM_SIZE to how much of ${disk} this system should take." >&2\n`;
+                o += `    echo "The remainder is left free for ${dualboot}." >&2\n`;
+                o += `    exit 1\n`;
+                o += `fi\n`;
+                o += `sgdisk -n 0:0:+"$THIS_SYSTEM_SIZE" -t 0:8300 ${disk}\n`;
+            } else {
+                o += `sgdisk -n 0:0:0 -t 0:8300 ${disk}\n`;
+            }
             o += `partprobe ${disk}\nsleep 2\n\n`;
             o += `# Fail closed: these must already exist, and the ESP must not be the\n`;
             o += `# other system's unless sharing was chosen deliberately.\n`;
@@ -1904,63 +1938,149 @@ run_with_progress() {
         if (!cmdOnly) o += `\`\`\`\n\n## 4. Bootloader (${boot})\n\`\`\`bash\n`;
         else o += `\n# 4. Bootloader\n`;
 
-        if (fw === "bios" || boot.includes("grub")) {
-            /* GRUB_PLATFORMS has to be set before GRUB is built on Gentoo, not
-               after: the package compiles for whichever platform is configured
-               at merge time, and grub-install then refuses with an error that
-               does not obviously point back here. */
-            if (isGentoo) {
-                o += `echo 'GRUB_PLATFORMS="${fw === "uefi" ? 'efi-64' : 'pc'}"' >> /etc/portage/make.conf\n`;
-                o += `${inst(['grub'])}\n`;
-                if (fw === "uefi") o += `${inst(['efibootmgr'])}\n`;
-            } else {
-                o += `pacman -S --noconfirm grub efibootmgr\n`;
+        /* When the existing system keeps the menu, this guide installs no
+           bootloader at all — it writes the kernel and initramfs and stops. A
+           second bootloader that does not know about the first is the usual way
+           the other operating system disappears from the menu, and the reader
+           then has a machine that boots one system with no obvious way back.
+
+           The steps that follow are the other system's, so they are comments:
+           they run over there, after this install, not here. */
+        if (isDual && dualOwner === 'existing') {
+            o += `# NO BOOTLOADER IS INSTALLED HERE. You chose to let the existing\n`;
+            o += `# ${dualboot} bootloader keep the menu, so this system only supplies a\n`;
+            o += `# kernel and an initramfs for it to find.\n`;
+            o += `#\n`;
+            o += `# After this install finishes, boot ${dualboot} and run its own:\n`;
+            o += `#   sudo grub-mkconfig -o /boot/grub/grub.cfg      # GRUB\n`;
+            o += `#   sudo update-grub                               # Debian/Ubuntu wrapper\n`;
+            o += `#   sudo bootctl list                              # systemd-boot: check entries\n`;
+            o += `#\n`;
+            o += `# os-prober must be installed AND enabled over there, or it will not see\n`;
+            o += `# this system: since GRUB 2.06 it is off by default.\n`;
+            o += `#   echo GRUB_DISABLE_OS_PROBER=false | sudo tee -a /etc/default/grub\n`;
+            if (!espShared) {
+                o += `#\n`;
+                o += `# This system has its own EFI partition, so the other bootloader will\n`;
+                o += `# not find it by scanning its own ESP. Mount this one where that\n`;
+                o += `# system can read it before running os-prober, or add the entry by\n`;
+                o += `# hand with efibootmgr.\n`;
             }
-            o += fw === "uefi"
-                ? (isGentoo
-                    ? `grub-install --efi-directory=${M.espMount}\n`
-                    : `grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB\n`)
-                : `grub-install --target=i386-pc ${disk}\n`;
             if (part !== "unencrypted") {
+                o += `#\n`;
+                o += `# The root volume is encrypted, and os-prober does not look inside a\n`;
+                o += `# locked volume. Expect to write the menu entry by hand, with the\n`;
+                o += `# cryptdevice UUID this install prints below.\n`;
                 o += `LUKS_UUID=$(blkid -s UUID -o value ${partRoot})\n`;
-                o += `sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\"cryptdevice=UUID=$LUKS_UUID:cryptroot root=/dev/mapper/cryptroot\\"|" /etc/default/grub\n`;
-                o += `echo "GRUB_ENABLE_CRYPTODISK=y" >> /etc/default/grub\n`;
+                o += `echo "Give the other system's bootloader this: cryptdevice=UUID=$LUKS_UUID:cryptroot"\n`;
             }
-            o += `grub-mkconfig -o /boot/grub/grub.cfg\n`;
-        } else if (boot.includes("uki")) {
-            if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Unified Kernel Image (UKI)\${COLOR_RESET}\n\${COLOR_FG}A UKI bundles the kernel, initramfs, and cmdline into a single EFI file. Extremely secure, built for Secure Boot.\nWiki: https://wiki.archlinux.org/title/Unified_kernel_image\${COLOR_RESET}"\n`;
-            if (isGentoo) {
-                o += `${inst(['sbsigntools', 'efitools', 'efibootmgr'])}\n`;
-                /* Gentoo builds a unified image through dracut rather than a
-                   mkinitcpio preset. `uefi="yes"` is what makes it one bundled
-                   executable instead of a kernel and an initramfs. */
-                o += `mkdir -p /etc/dracut.conf.d\n`;
-                o += `echo 'uefi="yes"' >> /etc/dracut.conf.d/uki.conf\n`;
-                if (gentooKernel === 'manual') {
-                    o += `# A hand-built kernel gets its unified image from installkernel on the\n`;
-                    o += `# next 'make install'; there is no package to reconfigure.\n`;
-                } else {
-                    o += `emerge --config ${(M.kernelPkgs[gentooKernel] || M.kernelPkgs.bin)[0]}   # rebuilds the image\n`;
-                }
-            } else {
-                o += `pacman -S --noconfirm sbsigntools efitools efibootmgr\n`;
-            }
-            if (boot === "uki-shim") {
+        } else {
+
+            if (fw === "bios" || boot.includes("grub")) {
+                /* GRUB_PLATFORMS has to be set before GRUB is built on Gentoo, not
+                   after: the package compiles for whichever platform is configured
+                   at merge time, and grub-install then refuses with an error that
+                   does not obviously point back here. */
                 if (isGentoo) {
-                    /* shim is distributed as a signed binary by its vendor, so
-                       there is no ebuild to point at. Saying where it comes from
-                       beats emitting a package name that does not resolve. */
-                    o += `# shim-signed has no Gentoo package: it is a vendor-signed binary.\n`;
-                    o += `# Take shimx64.efi from a distribution that ships it, or build and\n`;
-                    o += `# sign your own, then:\n`;
-                    o += `#   cp shimx64.efi ${M.espMount}/EFI/gentoo/bootx64.efi\n`;
+                    o += `echo 'GRUB_PLATFORMS="${fw === "uefi" ? 'efi-64' : 'pc'}"' >> /etc/portage/make.conf\n`;
+                    o += `${inst(['grub'])}\n`;
+                    if (fw === "uefi") o += `${inst(['efibootmgr'])}\n`;
                 } else {
-                    o += `pacman -S --noconfirm shim-signed\ncp /usr/share/shim-signed/shimx64.efi /efi/EFI/arch/bootx64.efi\n`;
+                    o += `pacman -S --noconfirm grub efibootmgr\n`;
+                }
+                o += fw === "uefi"
+                    ? (isGentoo
+                        ? `grub-install --efi-directory=${M.espMount}\n`
+                        : `grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB\n`)
+                    : `grub-install --target=i386-pc ${disk}\n`;
+                if (part !== "unencrypted") {
+                    o += `LUKS_UUID=$(blkid -s UUID -o value ${partRoot})\n`;
+                    o += `sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\\"cryptdevice=UUID=$LUKS_UUID:cryptroot root=/dev/mapper/cryptroot\\"|" /etc/default/grub\n`;
+                    o += `echo "GRUB_ENABLE_CRYPTODISK=y" >> /etc/default/grub\n`;
+                }
+                /* os-prober is what puts the other system in this menu, and GRUB
+                   has shipped with it disabled since 2.06 — so without this line
+                   the menu is built, looks right, and has one entry. */
+                if (isDual) {
+                    o += `${inst(['os-prober'])}\n`;
+                    o += `echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub\n`;
+                    o += `# Off by default since GRUB 2.06. Without this the other system never\n`;
+                    o += `# appears in the menu, however well it is installed.\n`;
+                    if (dualDefault === 'other') {
+                        /* Naming a menu index would break the moment a kernel is
+                           added. `saved` plus grub-set-default follows the entry
+                           rather than its position. */
+                        o += `echo "GRUB_DEFAULT=saved" >> /etc/default/grub\n`;
+                        o += `echo "GRUB_SAVEDEFAULT=true" >> /etc/default/grub\n`;
+                        o += `# Boots whatever was chosen last, so selecting ${dualboot} once makes\n`;
+                        o += `# it the default. A fixed menu index would move the next time a\n`;
+                        o += `# kernel is added.\n`;
+                    }
+                }
+                o += `grub-mkconfig -o /boot/grub/grub.cfg\n`;
+                if (isDual) {
+                    o += `grep -c menuentry /boot/grub/grub.cfg\n`;
+                    o += `# Expect more than one. If this says 1, os-prober did not find the\n`;
+                    o += `# other system — check it is not hibernated and, if its root is\n`;
+                    o += `# encrypted, that it is unlocked while grub-mkconfig runs.\n`;
+                }
+            } else if (boot.includes("uki")) {
+                if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Unified Kernel Image (UKI)\${COLOR_RESET}\n\${COLOR_FG}A UKI bundles the kernel, initramfs, and cmdline into a single EFI file. Extremely secure, built for Secure Boot.\nWiki: https://wiki.archlinux.org/title/Unified_kernel_image\${COLOR_RESET}"\n`;
+                if (isGentoo) {
+                    o += `${inst(['sbsigntools', 'efitools', 'efibootmgr'])}\n`;
+                    /* Gentoo builds a unified image through dracut rather than a
+                       mkinitcpio preset. `uefi="yes"` is what makes it one bundled
+                       executable instead of a kernel and an initramfs. */
+                    o += `mkdir -p /etc/dracut.conf.d\n`;
+                    o += `echo 'uefi="yes"' >> /etc/dracut.conf.d/uki.conf\n`;
+                    if (gentooKernel === 'manual') {
+                        o += `# A hand-built kernel gets its unified image from installkernel on the\n`;
+                        o += `# next 'make install'; there is no package to reconfigure.\n`;
+                    } else {
+                        o += `emerge --config ${(M.kernelPkgs[gentooKernel] || M.kernelPkgs.bin)[0]}   # rebuilds the image\n`;
+                    }
+                } else {
+                    o += `pacman -S --noconfirm sbsigntools efitools efibootmgr\n`;
+                }
+                if (boot === "uki-shim") {
+                    if (isGentoo) {
+                        /* shim is distributed as a signed binary by its vendor, so
+                           there is no ebuild to point at. Saying where it comes from
+                           beats emitting a package name that does not resolve. */
+                        o += `# shim-signed has no Gentoo package: it is a vendor-signed binary.\n`;
+                        o += `# Take shimx64.efi from a distribution that ships it, or build and\n`;
+                        o += `# sign your own, then:\n`;
+                        o += `#   cp shimx64.efi ${M.espMount}/EFI/gentoo/bootx64.efi\n`;
+                    } else {
+                        o += `pacman -S --noconfirm shim-signed\ncp /usr/share/shim-signed/shimx64.efi /efi/EFI/arch/bootx64.efi\n`;
+                    }
+                }
+            } else if (boot === "systemd-boot") {
+                if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Installing systemd-boot\${COLOR_RESET}\n\${COLOR_FG}systemd-boot is a minimalist, fast bootloader for UEFI systems.\nWiki: https://wiki.archlinux.org/title/Systemd-boot\${COLOR_RESET}"\n`;
+                o += `bootctl install --esp-path=/efi\n`;
+                /* systemd-boot has no os-prober. It lists what is in the ESP, so
+                   another system appears only if its loader is there — which is
+                   exactly what a separate ESP prevents. Saying so beats a menu that
+                   silently has one entry. */
+                if (isDual) {
+                    o += `bootctl list\n`;
+                    if (espShared) {
+                        o += `# systemd-boot lists loaders it finds in the ESP. Windows appears\n`;
+                        o += `# automatically; another Linux does only if its loader is on this\n`;
+                        o += `# same partition. There is no os-prober here.\n`;
+                    } else {
+                        o += `# This system has its OWN EFI partition, and systemd-boot only lists\n`;
+                        o += `# what is on the one it was installed to. The other system will not\n`;
+                        o += `# appear in this menu: reach it through the firmware boot menu, or\n`;
+                        o += `# add an entry with efibootmgr.\n`;
+                    }
+                    if (dualDefault === 'other') {
+                        o += `# You asked for the other system to boot by default. systemd-boot\n`;
+                        o += `# takes the entry id from 'bootctl list' above:\n`;
+                        o += `#   sed -i 's/^default .*/default <that-entry-id>/' /efi/loader/loader.conf\n`;
+                    }
                 }
             }
-        } else if (boot === "systemd-boot") {
-            if (cmdOnly) o += `echo -e "\n\${COLOR_BLUE}:: Step 4: Installing systemd-boot\${COLOR_RESET}\n\${COLOR_FG}systemd-boot is a minimalist, fast bootloader for UEFI systems.\nWiki: https://wiki.archlinux.org/title/Systemd-boot\${COLOR_RESET}"\n`;
-            o += `bootctl install --esp-path=/efi\n`;
         }
 
         if (!cmdOnly) o += `\`\`\`\n\n## 5. DNS (${dns})\n\`\`\`bash\n`;
@@ -4347,6 +4467,40 @@ function validateConfigurations() {
         // Required only while it is on screen, or the form cannot be submitted
         // for a whole-disk install.
         if (espPath) espPath.required = !!dual;
+
+        /* Order, ownership and the default entry travel with it. Kept beside
+           the ESP question rather than in their own handler so there is one
+           place that decides what "dual boot is on" reveals. */
+        ['dualboot-order-group', 'dualboot-owner-group', 'dualboot-default-group']
+            .forEach(function (id) {
+                const g = document.getElementById(id);
+                if (g) g.hidden = !dual;
+            });
+
+        /* Installing first means there is nothing to share yet: the other
+           system's EFI partition does not exist, so the only honest answer is
+           this system's own. The control is set and disabled rather than left
+           offering a choice that cannot be carried out. */
+        const espMode = document.getElementById('dualboot_esp_mode');
+        const order = document.getElementById('dualboot_order');
+        const ownerSel = document.getElementById('dualboot_owner');
+        if (dual && order && order.value === 'first') {
+            if (espMode) {
+                espMode.value = 'separate';
+                Array.from(espMode.options).forEach(function (o) {
+                    o.disabled = o.value === 'share';
+                });
+            }
+            if (ownerSel) {
+                ownerSel.value = 'this';
+                Array.from(ownerSel.options).forEach(function (o) {
+                    o.disabled = o.value === 'existing';
+                });
+            }
+        } else {
+            if (espMode) Array.from(espMode.options).forEach(function (o) { o.disabled = false; });
+            if (ownerSel) Array.from(ownerSel.options).forEach(function (o) { o.disabled = false; });
+        }
     }
 
     if (!bootloader || !part) return;
