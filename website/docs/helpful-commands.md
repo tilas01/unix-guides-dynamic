@@ -1,6 +1,12 @@
 # Commands, Cheatsheets & App Reference
 
-> Comprehensive command reference for Arch Linux, all window manager keyboard shortcuts, and post-install application details.
+> Command reference for the systems this project installs, every window manager
+> keyboard shortcut, and what each post-install application actually is.
+>
+> Verify anything you are unsure about against the system's own documentation —
+> [the Arch Wiki](https://wiki.archlinux.org) or
+> [the Gentoo Handbook](https://wiki.gentoo.org/wiki/Handbook:AMD64). Where they
+> and this disagree, they are right and this is a bug worth reporting.
 
 ---
 
@@ -23,11 +29,18 @@
 - [GNOME Shortcuts](#gnome-shortcuts)
 - [KDE Plasma Shortcuts](#kde-plasma-shortcuts)
 - [DWM Shortcuts](#dwm-shortcuts)
-- [Dusky Shortcuts](#dusky-os-shortcuts)
+- [Dusky Shortcuts](#dusky-shortcuts)
 - [Post-Install Apps Reference](#post-install-apps-reference)
 - [DNS Configuration Reference](#dns-configuration-reference)
+- [Security Auditing](#security-auditing)
 - [Security Suite Commands](#security-suite-commands)
 - [System Maintenance](#system-maintenance)
+
+> **Installing Gentoo rather than Arch?** Portage, USE flags, profiles, the
+> three kernel routes and OpenRC are on their own page:
+> [Gentoo commands](cheatsheets/gentoo-commands.md). Everything below that is
+> not a package-manager or init command — disks, LUKS, networking, the window
+> managers, the security suite — applies there too.
 
 ---
 
@@ -485,6 +498,14 @@ balooctl disable  # Disable file indexing
 pacman -S xorg-server xorg-xinit base-devel libx11 libxinerama libxft
 git clone https://git.suckless.org/dwm /usr/local/src/dwm
 cd /usr/local/src/dwm
+
+# Configuration is a C header, and this is the whole point of dwm: there is no
+# runtime config file, so changing a keybinding means editing config.h and
+# rebuilding. Copy the default first — config.h is yours and is not tracked,
+# while config.def.h is upstream's and will be updated under you.
+cp config.def.h config.h
+vim config.h
+
 make clean install
 ```
 
@@ -512,6 +533,35 @@ some of them.
 | `Super + arrows` | Move focus |
 | `Super + V` | Toggle floating |
 | `Super + F` | Fullscreen |
+
+**What Dusky actually puts on the machine:**
+
+| Component | What Dusky uses |
+|-----------|-----------------|
+| Compositor | Hyprland — Wayland, and its own compositor, so there is no picom |
+| Status bar | Waybar |
+| Launcher | Rofi |
+| Notifications | Swaync |
+| Session / logout | Wlogout |
+| Display manager | SDDM |
+| Terminal | Kitty |
+| Wallpaper | hyprpaper |
+| Fonts | JetBrains Mono / Nerd Font |
+
+```bash
+# Wallpaper — hyprpaper, set in ~/.config/hypr/hyprpaper.conf
+hyprctl hyprpaper wallpaper ",<path/to/image.png>"
+
+# Reload the bar
+pkill waybar && waybar &
+
+# Reload Hyprland's configuration without logging out
+hyprctl reload
+```
+
+> The X11 answers do not transfer. `picom`, `polybar` and `nitrogen` are Xorg
+> tools and none of them is running here — reaching for them is the most common
+> way a first Hyprland session gets confusing.
 
 > **The authoritative list is Dusky's own.** `cheatsheet.md` is cloned to
 > `/tmp/dusky/` during installation, and the bindings live in
@@ -581,6 +631,33 @@ systemctl enable named
 pacman -S --noconfirm dnsmasq
 systemctl enable dnsmasq
 ```
+
+---
+
+## Security Auditing
+
+Checking that the machine is in the state you left it in. None of these change
+anything, so they are safe to run at any time.
+
+```bash
+bootctl status                                          # Secure Boot state and the loader in use
+sbverify --list /efi/EFI/arch/secure-boot-linux.efi     # signatures on the boot image
+cryptsetup luksDump /dev/sdX2                           # LUKS header: type, cipher, which keyslots are used
+sha256sum <file>                                        # the download is intact
+gpg --verify <file>.asc <file>                          # and this says who built it
+ss -tulnp                                               # what is listening, and which process owns it
+systemctl list-units --failed                           # anything that did not start
+last -a | head                                          # recent logins, with where from
+```
+
+> A hash and a signature answer different questions. `sha256sum` says the file
+> arrived unaltered; only `gpg --verify` says who produced it. A hash published
+> beside the download on the same server proves nothing against whoever can
+> write to that server.
+
+On a system with OpenRC rather than systemd, the last two become
+`rc-status --all` and a look at `/var/log/` — there is no journal, and nothing
+is logged at all until a syslog daemon is installed.
 
 ---
 
