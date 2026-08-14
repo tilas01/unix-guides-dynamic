@@ -242,6 +242,23 @@ jobs:
         run: npm run toolsupport
         working-directory: tests
 
+      # The emitted install scripts, linted rather than merely parsed. The
+      # permutation gates already run every script through `bash -n`, which
+      # proves the file parses and nothing more — an unquoted path that
+      # word-splits, or a `cd` whose failure is ignored before an `rm -rf`,
+      # parses perfectly. These scripts are the product, so they are held to
+      # the same standard as source.
+      #
+      # ubuntu-latest ships shellcheck. The gate treats a missing one as a
+      # failure when CI is set, rather than skipping: a gate that quietly does
+      # not run reads as a pass.
+      - name: Install shellcheck
+        run: sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: "Test: emitted scripts pass shellcheck"
+        run: npm run shellcheck
+        working-directory: tests
+
       # Characters nobody typed: byte-order marks, zero-width spaces, a
       # non-breaking space inside a command, UTF-16, and the mojibake a UTF-8
       # round trip through Latin-1 leaves behind. Each of these is invisible in

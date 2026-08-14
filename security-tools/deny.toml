@@ -1,0 +1,74 @@
+# Dependency policy for every crate in security-tools/.
+#
+# One file rather than one per crate. The crates are separate packages with no
+# workspace between them, which is a deliberate choice, but the policy about
+# what may end up inside them is not per-crate — a licence that cannot be
+# redistributed is a problem wherever it lands, and so is an unmaintained
+# parser sitting under a tool that reads untrusted input.
+#
+# Used from the release workflow as:
+#     cargo deny --all-features --config ../deny.toml check
+#
+# These binaries are published signed and installed by people to protect a
+# machine, so the bar is what a redistributor needs rather than what compiles.
+
+[advisories]
+# Security advisories from the RustSec database.
+#
+# `cargo audit` in the same workflow already denies these and is the primary
+# gate; keeping them here means one command covers a crate if the other is ever
+# dropped. Unmaintained is a warning rather than an error: it is a real signal
+# and it is not, on its own, a vulnerability.
+yanked = "deny"
+unmaintained = "workspace"
+# Advisories consciously accepted go here, each with the id and the reason.
+# Empty is the honest state: nothing is currently being ignored.
+ignore = []
+
+[licences]
+# Spelled the British way by cargo-deny's newer schema; `[licenses]` is the
+# older key. Both are accepted, and this file uses the one the current tool
+# reads.
+version = 2
+# Permissive licences only. These crates are published as binaries that other
+# people redistribute, and a copyleft dependency changes what those people are
+# obliged to do — which is not a decision this project can make for them.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+]
+# A crate whose licence cannot be determined is a failure, not a shrug. If one
+# appears, read its repository and add an explicit clarification below rather
+# than widening `allow`.
+unused-allowed-license = "allow"
+confidence-threshold = 0.9
+
+[bans]
+# Duplicates are a warning rather than an error, and that is a considered
+# position rather than a loosened one. Two versions of the same crate in a tree
+# is two things to patch when an advisory lands, so it is worth seeing — but in
+# practice it is usually forced by a transitive dependency and cannot be fixed
+# from here. Failing on it would mean routinely overriding the gate, and a gate
+# that gets routinely overridden stops being read.
+multiple-versions = "warn"
+wildcards = "deny"
+# Nothing is banned outright yet. An entry here should name the crate and the
+# reason, so that a future reader can tell a policy from an accident.
+deny = []
+
+[sources]
+# Only crates.io. A git dependency in a signed security binary means the thing
+# that was audited and the thing that was built can differ without the lockfile
+# saying so.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

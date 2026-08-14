@@ -82,15 +82,37 @@ jobs:
         run: cargo clippy --all-targets --release --locked -- -D warnings
         working-directory: security-tools/${{ matrix.tool }}
 
-      # Advisory rather than blocking: a newly published advisory in a transitive
-      # dependency should surface loudly but must not stop a security fix from
-      # shipping. Findings appear in the run summary.
+      # Known vulnerabilities in the dependency tree, against the RustSec
+      # database. Blocking.
+      #
+      # This was advisory for a while, on the reasoning that a newly published
+      # advisory should not stop a security fix from shipping. That trade reads
+      # differently for these crates: they parse untrusted input, hold
+      # passphrases in memory and erase LUKS keyslots, and they are published as
+      # signed binaries that people install to protect a machine. Shipping one
+      # with a known-vulnerable dependency is the failure this project exists to
+      # argue against.
+      #
+      # `--ignore` an advisory by id with a comment naming why, if one genuinely
+      # cannot be acted on yet. That leaves a record; `continue-on-error` left
+      # a warning nobody read.
       - name: Audit dependencies for known vulnerabilities
-        continue-on-error: true
         run: |
           cargo install cargo-audit --locked --quiet 2>/dev/null || cargo install cargo-audit --locked
-          cargo audit --deny warnings \
-            || echo "::warning::cargo audit reported advisories for ${{ matrix.tool }} - see log"
+          cargo audit --deny warnings
+        working-directory: security-tools/${{ matrix.tool }}
+
+      # Licence policy, dependency sources and duplicates, against the shared
+      # policy in security-tools/deny.toml. Blocking on licences and on sources
+      # that are not crates.io; duplicates warn, and that file says why.
+      #
+      # An incompatible licence matters here because these are published as
+      # binaries other people redistribute, which is not a decision this
+      # project can make on their behalf.
+      - name: Check dependency licences and sources
+        run: |
+          cargo install cargo-deny --locked --quiet 2>/dev/null || cargo install cargo-deny --locked
+          cargo deny --all-features --config ../deny.toml check
         working-directory: security-tools/${{ matrix.tool }}
 
       # --locked so the committed Cargo.lock is honoured exactly; without it a
