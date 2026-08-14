@@ -28,3 +28,8 @@ eframe = "0.27.2"
 egui = "0.27.2"
 
 clap = { version = "4.5.4", features = ["derive"] }
+
+[profile.release]
+# Kept on across the suite: these parse untrusted input, and a silent integer
+# wrap in a parser is how a length check stops being a length check.
+overflow-checks = true

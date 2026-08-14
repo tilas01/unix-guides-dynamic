@@ -23,6 +23,12 @@ anti-evil-maid = { path = "../anti-evil-maid" }
 kernel-watcher = { path = "../kernel-watcher" }
 scarecrow      = { path = "../scarecrow" }
 
+# Linked directly rather than relied on through the tools. Each of them calls
+# harden_process() from its own main(), and this binary has its own main() and
+# dispatches into their library functions — so without this dependency the
+# all-in-one build is the one artefact in the suite that runs unhardened.
+suite-hardening = { path = "../suite-hardening" }
+
 # ─── Reproducible, optimised release builds ───────────────────────────────────
 # Bit-for-bit reproducibility needs the build to contain nothing that varies
 # between machines: no absolute paths, no timestamps, no host-specific codegen.

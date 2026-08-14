@@ -403,8 +403,13 @@ mod imp {
     ///
     /// Without this the kernel may page the resume helper out to swap — and swap
     /// is very often on the volume being suspended, so the next instruction
-    /// fetch blocks forever. Best-effort: reported, never fatal, in line with
-    /// the rest of the suite's hardening.
+    /// fetch blocks forever.
+    ///
+    /// Returns whether it succeeded and decides nothing itself. **The caller
+    /// treats failure as fatal when the volume is root-backed** and continues
+    /// otherwise, which is not the best-effort posture the rest of the suite's
+    /// hardening takes: elsewhere a failed `mlockall` costs some secrecy, and
+    /// here it costs the machine. Read `lock_now` before relaxing that check.
     fn mlock_self() -> bool {
         // SAFETY: mlockall takes flags and touches no memory this program owns.
         unsafe { libc::mlockall(libc::MCL_CURRENT | libc::MCL_FUTURE) == 0 }

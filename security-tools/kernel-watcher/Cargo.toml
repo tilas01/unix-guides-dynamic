@@ -28,3 +28,8 @@ aya = "0.12.0"
 aya-log = "0.2.0"
 
 clap = { version = "4.5.4", features = ["derive"] }
+
+[profile.release]
+# Kept on across the suite: these parse untrusted input, and a silent integer
+# wrap in a parser is how a length check stops being a length check.
+overflow-checks = true

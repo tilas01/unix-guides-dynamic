@@ -252,6 +252,15 @@ jobs:
       # ubuntu-latest ships shellcheck. The gate treats a missing one as a
       # failure when CI is set, rather than skipping: a gate that quietly does
       # not run reads as a pass.
+      # Every `unsafe` block carries a SAFETY: comment naming the invariant, and
+      # `overflow-checks` stays on in release. Neither needs a Rust toolchain —
+      # it reads the crates' own sources and manifests — so it belongs here
+      # rather than in the release workflow, where it would only run when
+      # something is being published.
+      - name: "Test: unsafe is accounted for, overflow checks stay on"
+        run: npm run rustsafety
+        working-directory: tests
+
       - name: Install shellcheck
         run: sudo apt-get install -y --no-install-recommends shellcheck
 

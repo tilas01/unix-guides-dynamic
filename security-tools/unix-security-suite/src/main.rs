@@ -121,6 +121,19 @@ fn run_gui(name: &str, result: eframe::Result<()>) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    // First statement, before argument parsing, and for the same reason every
+    // tool in the suite does it in its own main(): a crash any time before this
+    // call still dumps the whole address space, and several of the subcommands
+    // below read a passphrase, an OTP secret or a duress PIN into it.
+    //
+    // This binary needs its own call rather than inheriting one. The tools each
+    // harden inside `main()`, and the dispatch below enters their *library*
+    // functions instead — so the all-in-one build, which is the one the site
+    // recommends because it is a single file to install and verify, was the
+    // only artefact in the suite running with memory swappable, core dumps
+    // enabled and ptrace attach permitted.
+    let _hardening = suite_hardening::harden_process();
+
     let cli = Cli::parse();
 
     match cli.command {

@@ -28,3 +28,8 @@ libc = "0.2"
 [[bin]]
 name = "anti-evil-maid"
 path = "src/main.rs"
+
+[profile.release]
+# Kept on across the suite: these parse untrusted input, and a silent integer
+# wrap in a parser is how a length check stops being a length check.
+overflow-checks = true

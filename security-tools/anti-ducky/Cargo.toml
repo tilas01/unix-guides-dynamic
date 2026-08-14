@@ -32,3 +32,8 @@ rand_core = { version = "0.6.4", features = ["getrandom"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 evdev = "0.12.2"
+
+[profile.release]
+# Kept on across the suite: these parse untrusted input, and a silent integer
+# wrap in a parser is how a length check stops being a length check.
+overflow-checks = true
