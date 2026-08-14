@@ -1931,8 +1931,19 @@ run_with_progress() {
             let cryptoHook = part !== "unencrypted" ? (initSys === "systemd" ? "sd-encrypt" : "encrypt") : "";
             let lvmHook = part.includes("lvm") ? "lvm2" : "";
             let fsHook = fs === "btrfs" ? "btrfs filesystems fsck" : "filesystems fsck";
-            let hooks = [baseHooks, cryptoHook, lvmHook, fsHook].filter(h => h).join(" ");
+            /* The duress hook has to run before the volume is unlocked, so it
+               goes immediately ahead of encrypt/sd-encrypt rather than being
+               appended by a second sed afterwards. */
+            let duressHook = (part !== "unencrypted" && luks_duress !== "none") ? "duress" : "";
+            let hooks = [baseHooks, duressHook, cryptoHook, lvmHook, fsHook].filter(h => h).join(" ");
+            if (duressHook) o += buildDuressHook(luks_duress, luks_duress_decoy, partRoot);
             o += `sed -i 's/^HOOKS=.*/HOOKS=(${hooks})/' /etc/mkinitcpio.conf\n${M.initramfs}\n`;
+        }
+        /* Gentoo reaches the same place through dracut, and its module has to
+           exist before the initramfs is built. */
+        if (M.initramfs === null && isGentoo && part !== "unencrypted" && luks_duress !== "none") {
+            o += buildDuressHook(luks_duress, luks_duress_decoy, partRoot);
+            o += `dracut --force\n`;
         }
 
         if (!cmdOnly) o += `\`\`\`\n\n## 4. Bootloader (${boot})\n\`\`\`bash\n`;
@@ -3739,95 +3750,6 @@ function buildLuksDuress(action, decoyEnv, partRoot, cmdOnly) {
     o += `chmod 600 /mnt/etc/arch-security/duress.conf\n`;
     o += `unset DURESS_PASS DURESS_PASS2 DURESS_HASH DURESS_SALT\n\n`;
 
-    /* The body of the hook: what it does when the passphrase is entered. The
-       same on every system, because it is the initramfs *generator* that
-       differs and not the logic. Held as lines so both wrappers can carry it
-       without the two copies drifting apart — and this one especially must not
-       drift, because a duress passphrase that has quietly stopped being checked
-       is worse than not having one. */
-    const duressBody = [];
-    duressBody.push(`    [ -f /etc/arch-security/duress.conf ] || return 0`);
-    duressBody.push(`    . /etc/arch-security/duress.conf`);
-    duressBody.push(`    printf 'Enter passphrase: '`);
-    duressBody.push(`    read -s _pw; echo`);
-    duressBody.push(`    _try=$(printf '%s%s' "$SALT" "$_pw" | sha512sum | cut -d' ' -f1)`);
-    duressBody.push(`    if [ "$_try" != "$HASH" ]; then`);
-    duressBody.push(`        # Not the duress passphrase: hand it to the normal unlock path.`);
-    duressBody.push(`        printf '%s' "$_pw" > /crypto_keyfile.bin`);
-    duressBody.push(`        unset _pw _try`);
-    duressBody.push(`        return 0`);
-    duressBody.push(`    fi`);
-    duressBody.push(`    unset _pw _try`);
-    if (destructive) {
-        duressBody.push(`    # Duress: erase every keyslot. This is irreversible.`);
-        duressBody.push(`    cryptsetup erase --batch-mode ${partRoot} >/dev/null 2>&1`);
-        duressBody.push(`    # Overwrite the header area as a second line of defence.`);
-        duressBody.push(`    dd if=/dev/urandom of=${partRoot} bs=1M count=32 conv=fsync >/dev/null 2>&1`);
-    }
-    if (usesDecoy) {
-        duressBody.push(`    # Boot the decoy volume. It has no reference to the real volume.`);
-        duressBody.push(`    if cryptsetup open --key-file=- /dev/disk/by-partlabel/decoy decoyroot; then`);
-        duressBody.push(`        mount /dev/mapper/decoyroot /new_root 2>/dev/null && return 0`);
-        duressBody.push(`    fi`);
-        duressBody.push(`    # Decoy unavailable: fall back to powering off rather than revealing anything.`);
-        duressBody.push(`    poweroff -f`);
-    } else {
-        duressBody.push(`    # No decoy configured: power off immediately.`);
-        duressBody.push(`    poweroff -f`);
-    }
-
-    const mnt = genOs.mnt || '/mnt';
-    o += `# Initramfs hook: compare the entered passphrase against the stored hash.\n`;
-    if (genOs.gentoo) {
-        /* Dracut's shape. The prompt has to come before the volume is opened,
-           which here is the `cmdline` hook rather than a position in a HOOKS
-           list — and `return 0` becomes `exit 0` because the body is a script
-           rather than a function. */
-        o += `mkdir -p ${mnt}/usr/lib/dracut/modules.d/90duress\n`;
-        o += `cat > ${mnt}/usr/lib/dracut/modules.d/90duress/duress.sh << 'HOOK_EOF'\n`;
-        o += `#!/bin/sh\n`;
-        duressBody.forEach(l => { o += `${l.replace(/^ {4}/, '').replace(/\breturn 0\b/, 'exit 0')}\n`; });
-        o += `HOOK_EOF\n`;
-        o += `chmod 755 ${mnt}/usr/lib/dracut/modules.d/90duress/duress.sh\n\n`;
-        o += `cat > ${mnt}/usr/lib/dracut/modules.d/90duress/module-setup.sh << 'INST_EOF'\n`;
-        o += `#!/bin/bash\n`;
-        o += `check() { return 0; }\n`;
-        o += `depends() { echo crypt; }\n`;
-        o += `install() {\n`;
-        o += `    inst_multiple cryptsetup sha512sum dd\n`;
-        o += `    inst_simple /etc/arch-security/duress.conf\n`;
-        o += `    inst_hook cmdline 20 "$moddir/duress.sh"\n`;
-        o += `}\n`;
-        o += `INST_EOF\n`;
-        o += `chmod 755 ${mnt}/usr/lib/dracut/modules.d/90duress/module-setup.sh\n\n`;
-        o += `mkdir -p ${mnt}/etc/dracut.conf.d\n`;
-        o += `echo 'add_dracutmodules+=" duress "' >> ${mnt}/etc/dracut.conf.d/duress.conf\n`;
-        o += `chroot ${mnt} /bin/bash -c 'dracut --force'\n`;
-    } else {
-        o += `cat > /mnt/etc/initcpio/hooks/duress << 'HOOK_EOF'\n`;
-        o += `#!/usr/bin/ash\n`;
-        o += `run_hook() {\n`;
-        duressBody.forEach(l => { o += `${l}\n`; });
-        o += `}\n`;
-        o += `HOOK_EOF\n`;
-        o += `chmod 755 /mnt/etc/initcpio/hooks/duress\n\n`;
-
-        o += `cat > /mnt/etc/initcpio/install/duress << 'INST_EOF'\n`;
-        o += `#!/bin/bash\n`;
-        o += `build() {\n`;
-        o += `    add_runscript\n`;
-        o += `    add_binary cryptsetup\n`;
-        o += `    add_binary sha512sum\n`;
-        o += `    add_binary dd\n`;
-        o += `    add_file /etc/arch-security/duress.conf\n`;
-        o += `}\n`;
-        o += `help() { echo "Handles the LUKS duress passphrase."; }\n`;
-        o += `INST_EOF\n`;
-        o += `chmod 755 /mnt/etc/initcpio/install/duress\n\n`;
-        o += `# Add the hook ahead of encrypt/sd-encrypt so it sees the passphrase first.\n`;
-        o += `sed -i 's/\\(HOOKS=.*\\)\\(encrypt\\|sd-encrypt\\)/\\1duress \\2/' /mnt/etc/mkinitcpio.conf\n`;
-        o += `arch-chroot /mnt mkinitcpio -P\n`;
-    }
 
     if (usesDecoy) {
         o += `\n# Reminder: create the decoy volume before relying on this.\n`;
@@ -3838,6 +3760,117 @@ function buildLuksDuress(action, decoyEnv, partRoot, cmdOnly) {
 
     o += endGuard;
     if (!cmdOnly) o += `\`\`\`\n`;
+    return o;
+}
+
+/**
+ * The initramfs half of the duress passphrase, emitted inside the new system.
+ *
+ * Split from `buildLuksDuress()` because the two halves belong at different
+ * points in the install and putting them together made the whole script fail.
+ * Registering the extra keyslot has to happen where the volume is open and the
+ * real passphrase is still in a variable — that is during partitioning, before
+ * anything is installed. Writing the boot hook has to happen after the base
+ * system exists: `/etc/initcpio/hooks/` is a directory the base install
+ * creates, so writing into it beforehand fails outright, and the initramfs
+ * cannot be built inside an empty root.
+ *
+ * `duress` is inserted into HOOKS by the caller rather than by a second `sed`,
+ * and the caller's own initramfs rebuild covers it, so this writes files and
+ * nothing else.
+ */
+function buildDuressHook(action, decoyEnv, partRoot) {
+    /* Read from the same option values `buildLuksDuress()` reads. Two copies of
+       this mapping that disagree would arm one half of the response and not the
+       other, which on the erase path means a passphrase that destroys the
+       keyslots and then unlocks nothing to boot into. */
+    const destructive = action === 'wipe-keys' || action === 'wipe-keys-decoy';
+    const usesDecoy = action === 'decoy-only' || action === 'wipe-keys-decoy';
+    let o = '';
+
+    /* The body of the hook: what it does when the passphrase is entered. Held
+       as lines because the two initramfs generators disagree about the wrapper
+       around it and about nothing inside it — and this one especially must not
+       drift, because a duress passphrase that has quietly stopped being checked
+       is worse than never having had one. */
+    const body = [];
+    body.push(`    [ -f /etc/arch-security/duress.conf ] || return 0`);
+    body.push(`    . /etc/arch-security/duress.conf`);
+    body.push(`    printf 'Enter passphrase: '`);
+    body.push(`    read -s _pw; echo`);
+    body.push(`    _try=$(printf '%s%s' "$SALT" "$_pw" | sha512sum | cut -d' ' -f1)`);
+    body.push(`    if [ "$_try" != "$HASH" ]; then`);
+    body.push(`        # Not the duress passphrase: hand it to the normal unlock path.`);
+    body.push(`        printf '%s' "$_pw" > /crypto_keyfile.bin`);
+    body.push(`        unset _pw _try`);
+    body.push(`        return 0`);
+    body.push(`    fi`);
+    body.push(`    unset _pw _try`);
+    if (destructive) {
+        body.push(`    # Duress: erase every keyslot. This is irreversible.`);
+        body.push(`    cryptsetup erase --batch-mode ${partRoot} >/dev/null 2>&1`);
+        body.push(`    # Overwrite the header area as a second line of defence.`);
+        body.push(`    dd if=/dev/urandom of=${partRoot} bs=1M count=32 conv=fsync >/dev/null 2>&1`);
+    }
+    if (usesDecoy) {
+        body.push(`    # Boot the decoy volume. It has no reference to the real volume.`);
+        body.push(`    if cryptsetup open --key-file=- /dev/disk/by-partlabel/decoy decoyroot; then`);
+        body.push(`        mount /dev/mapper/decoyroot /new_root 2>/dev/null && return 0`);
+        body.push(`    fi`);
+        body.push(`    # Decoy unavailable: fall back to powering off rather than revealing anything.`);
+        body.push(`    poweroff -f`);
+    } else {
+        body.push(`    # No decoy configured: power off immediately.`);
+        body.push(`    poweroff -f`);
+    }
+
+    o += `\n# Duress passphrase: the boot hook that compares what was typed.\n`;
+    if (genOs.gentoo) {
+        /* Dracut's shape. `cmdline` runs before the volume is opened, which is
+           the position `encrypt` occupies on the other side, and `return 0`
+           becomes `exit 0` because the body is a script rather than a
+           function. */
+        o += `mkdir -p /usr/lib/dracut/modules.d/90duress\n`;
+        o += `cat > /usr/lib/dracut/modules.d/90duress/duress.sh << 'HOOK_EOF'\n`;
+        o += `#!/bin/sh\n`;
+        body.forEach(l => { o += `${l.replace(/^ {4}/, '').replace(/\breturn 0\b/, 'exit 0')}\n`; });
+        o += `HOOK_EOF\n`;
+        o += `chmod 755 /usr/lib/dracut/modules.d/90duress/duress.sh\n`;
+        o += `cat > /usr/lib/dracut/modules.d/90duress/module-setup.sh << 'INST_EOF'\n`;
+        o += `#!/bin/bash\n`;
+        o += `check() { return 0; }\n`;
+        o += `depends() { echo crypt; }\n`;
+        o += `install() {\n`;
+        o += `    inst_multiple cryptsetup sha512sum dd\n`;
+        o += `    inst_simple /etc/arch-security/duress.conf\n`;
+        o += `    inst_hook cmdline 20 "$moddir/duress.sh"\n`;
+        o += `}\n`;
+        o += `INST_EOF\n`;
+        o += `chmod 755 /usr/lib/dracut/modules.d/90duress/module-setup.sh\n`;
+        o += `mkdir -p /etc/dracut.conf.d\n`;
+        o += `echo 'add_dracutmodules+=" duress "' >> /etc/dracut.conf.d/duress.conf\n`;
+    } else {
+        o += `mkdir -p /etc/initcpio/hooks /etc/initcpio/install\n`;
+        o += `cat > /etc/initcpio/hooks/duress << 'HOOK_EOF'\n`;
+        o += `#!/usr/bin/ash\n`;
+        o += `run_hook() {\n`;
+        body.forEach(l => { o += `${l}\n`; });
+        o += `}\n`;
+        o += `HOOK_EOF\n`;
+        o += `chmod 755 /etc/initcpio/hooks/duress\n`;
+        o += `cat > /etc/initcpio/install/duress << 'INST_EOF'\n`;
+        o += `#!/bin/bash\n`;
+        o += `build() {\n`;
+        o += `    add_runscript\n`;
+        o += `    add_binary cryptsetup\n`;
+        o += `    add_binary sha512sum\n`;
+        o += `    add_binary dd\n`;
+        o += `    add_file /etc/arch-security/duress.conf\n`;
+        o += `}\n`;
+        o += `help() { echo "Handles the LUKS duress passphrase."; }\n`;
+        o += `INST_EOF\n`;
+        o += `chmod 755 /etc/initcpio/install/duress\n`;
+    }
     return o;
 }
 

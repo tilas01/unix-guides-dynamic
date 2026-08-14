@@ -241,6 +241,87 @@ for (const id of Object.keys(META)) {
     window.close();
 }
 
+/* ── Options the default form does not exercise ──────────────────────────────
+ *
+ * The loop above generates with whatever the controls are set to when the page
+ * loads, which is one configuration out of thousands. That is enough to measure
+ * tooling leakage and not enough to catch an ordering mistake in a branch the
+ * defaults never enter.
+ *
+ * The duress passphrase is such a branch, and it had a real defect: the boot
+ * hook was written into /mnt/etc/initcpio/ and the initramfs rebuilt through
+ * arch-chroot, both emitted *before* the base install created /mnt. Under
+ * `set -e` the generated script stopped there; without it, the base install
+ * later overwrote what had been written. It parsed cleanly the whole time,
+ * because ordering is not something `bash -n` can see.
+ *
+ * So the rule asserted here is about position, not syntax: nothing may write
+ * into the new system before the new system exists.
+ */
+{
+    const setup = {
+        partitioning: 'luks2',
+        luks_duress_action: 'wipe-keys',
+        bootloader: 'grub'
+    };
+    const { window } = await loadPage(JSDOM, VirtualConsole, server.origin, 'index.html', { wait: 300 });
+    if (await waitFor(window, w => typeof w.generateOutput === 'function',
+                      'the generator to finish running, for the duress pass')) {
+        for (const [id, value] of Object.entries(setup)) {
+            const el = window.document.getElementById(id);
+            ok(!!el, `duress pass: no control '${id}' — the option was renamed or removed`);
+            if (el) el.value = value;
+        }
+        window.generateOutput(true);
+        const sh = window.sessionStorage.getItem('live_sh') || '';
+        const lines = sh.split('\n');
+        const at = re => lines.findIndex(l => re.test(l));
+
+        /* Anchored to the start of a line, because the embedded configuration
+           on line 2 mentions several of these words as answer values —
+           `gentoo_stage3` contains "stage3" — and matching it would put the
+           base install before everything and make the ordering check
+           meaningless while still reporting a number. */
+        const base = at(/^(?:run_with_progress "pacstrap|pacstrap )|^tar xpvf |^emerge .*--noreplace/);
+        const hook = at(/initcpio\/hooks\/duress|modules\.d\/90duress/);
+        const build = at(/^mkinitcpio -P|^dracut --force/);
+
+        ok(base !== -1, 'duress pass: the script installs no base system at all');
+        ok(hook !== -1, 'duress pass: a duress action was chosen and no boot hook was written — ' +
+                        'the passphrase would be an ordinary second key that unlocks the volume');
+        if (base !== -1 && hook !== -1) {
+            ok(hook > base,
+               'duress pass: the boot hook is written before the base system exists, so the ' +
+               'directory it goes in is not there yet and the script stops');
+        }
+        if (base !== -1 && build !== -1) {
+            ok(build > base,
+               'duress pass: the initramfs is rebuilt before the base system exists');
+        }
+        ok(!/arch-chroot \/mnt mkinitcpio/.test(sh),
+           'duress pass: rebuilds the initramfs through a chroot into an empty /mnt');
+
+        /* The keyslot half belongs on the other side of that line: it needs the
+           volume open and the real passphrase still in a variable. */
+        const addKey = at(/luksAddKey/);
+        ok(addKey !== -1 && (base === -1 || addKey < base),
+           'duress pass: the extra keyslot is registered after the base install, by which ' +
+           'point the passphrase variable it needs is out of scope');
+
+        const file = path.join(tmp, 'duress.sh');
+        fs.writeFileSync(file, sh.startsWith('#!') ? sh : '#!/usr/bin/env bash\n' + sh);
+        try {
+            execFileSync('bash', ['-n', file], { stdio: 'pipe' });
+            checks++;
+        } catch (e) {
+            fails++; checks++;
+            failures.push('duress pass: bash -n rejected the generated script — ' +
+                          String(e.stderr || e.message).split('\n')[0]);
+        }
+    }
+    window.close();
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(`generator-os: ${Object.keys(META).length} systems driven through index.html`);
