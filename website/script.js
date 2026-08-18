@@ -4357,44 +4357,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // UI EVENT HANDLERS
 // ====================================================================
 
-function injectNoSelectionProvided() {
-    document.querySelectorAll('.generator-form select').forEach(select => {
-        // Remove existing if any to avoid duplicates
-        const existing = Array.from(select.options).find(o => o.value === "");
-        if (existing) existing.remove();
+/* The placeholder option is injected once, near the top of this file, and
+   deliberately not here.
 
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.text = "No Selection Provided";
-        opt.disabled = true;
-        opt.selected = true;
-        opt.hidden = true; // Hides it from the dropdown list once opened
-        select.insertBefore(opt, select.firstChild);
+   A second injector used to sit at this point doing the same job carelessly:
+   it removed whatever empty option was already present and inserted its own
+   with `selected` set unconditionally, which discarded the default declared in
+   the markup for twenty-five dropdowns. It registered later, so it ran later
+   and won. The visible result was that every select on the form read empty at
+   load - locale, keymap, dual boot, the five Gentoo questions, the duress
+   action, the wallpaper count - and each had to be answered by hand even where
+   the markup had already answered it.
 
-        // Instantly remove on interaction to fix iOS Safari ghosting
-        const removePlaceholder = () => {
-            const placeholder = Array.from(select.options).find(o => o.value === "");
-            if (placeholder) placeholder.remove();
-            select.removeEventListener('mousedown', removePlaceholder);
-            select.removeEventListener('touchstart', removePlaceholder);
-        };
-        select.addEventListener('mousedown', removePlaceholder);
-        select.addEventListener('touchstart', removePlaceholder);
-
-        // Standard validation cleanup
-        select.addEventListener('change', function handler() {
-            if (this.value !== "") {
-                removePlaceholder();
-                this.removeEventListener('change', handler); // Clean up
-                // Remove red border if present
-                this.style.border = "";
-                const warn = this.parentElement.querySelector('.req-warning');
-                if (warn) warn.remove();
-            }
-        });
-    });
-}
-document.addEventListener('DOMContentLoaded', injectNoSelectionProvided);
+   The surviving injector skips a select that already has an empty option and
+   claims the selection only when the markup declared no default, which is what
+   was intended all along. It attaches the same interaction cleanup, so nothing
+   was lost with the duplicate. */
 // Generation is triggered by the form's submit event (see the onsubmit on
 // #install-form), which covers both clicking the button and pressing Enter in
 // any field. There is deliberately no separate click handler here: one would
