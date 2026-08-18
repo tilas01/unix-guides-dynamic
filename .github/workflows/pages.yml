@@ -238,6 +238,14 @@ jobs:
         run: npm run genvalid
         working-directory: tests
 
+      # A package name missing from a system's table does not fail loudly: it
+      # falls through and reaches the reader as the Arch spelling inside an
+      # otherwise correct command. No leakage count sees that, because the tool
+      # is right and only the argument is wrong.
+      - name: "Test: every system renames the same packages"
+        run: npm run pkgnames
+        working-directory: tests
+
       # Retired names must stay retired. anti-ducky's rename half-reverted once
       # and left a journalctl line naming a unit that never existed.
       - name: "Test: naming parity"

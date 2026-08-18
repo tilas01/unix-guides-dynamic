@@ -57,11 +57,9 @@
             'texinfo': 'sys-apps/texinfo',
             'btrfs-progs': 'sys-fs/btrfs-progs',
             'xfsprogs': 'sys-fs/xfsprogs',
-            'e2fsprogs': 'sys-fs/e2fsprogs',
             'cryptsetup': 'sys-fs/cryptsetup',
             'lvm2': 'sys-fs/lvm2',
             'networkmanager': 'net-misc/networkmanager',
-            'dhcpcd': 'net-misc/dhcpcd',
             'iwd': 'net-wireless/iwd',
             'grub': 'sys-boot/grub',
             'efibootmgr': 'sys-boot/efibootmgr',
@@ -76,9 +74,14 @@
             'cronie': 'sys-process/cronie',
             'opendoas': 'app-admin/doas',
             'ttf-jetbrains-mono': 'media-fonts/jetbrains-mono',
-            /* One package on Gentoo where Arch splits the plain font from its
-               patched form; the ebuild builds the Nerd Fonts variants. */
-            'ttf-jetbrains-mono-nerd': 'media-fonts/nerdfonts',
+            /* There is no Nerd Fonts patched build in the main tree -
+               media-fonts/nerdfonts does not exist, which this table claimed it
+               did. media-fonts/jetbrains-mono is the plain font and is a
+               different thing: the patch is what supplies the icon glyphs a
+               Nerd Font is chosen for, so substituting it would leave a status
+               bar full of empty boxes. Fetch the patched build from the Nerd
+               Fonts release instead. */
+            'ttf-jetbrains-mono-nerd': null,
             'base-devel': null,        // Gentoo's toolchain is in the stage3
             'terminus-font': 'media-fonts/terminus-font',
             'apparmor': 'sys-apps/apparmor',
@@ -96,7 +99,6 @@
             /* Distributed as a signed binary by its vendor rather than built
                from source, so there is no ebuild that could be honest here. */
             'shim-signed': null,
-            'sysklogd': 'app-admin/sysklogd',
             'dbus': 'sys-apps/dbus',
             'os-prober': 'sys-boot/os-prober',
             'snapper': 'app-backup/snapper',
@@ -148,11 +150,14 @@
                portage integration is a Portage hook script instead. */
             'snap-pac': null,
             'grub-btrfs': 'sys-fs/grub-btrfs',
-            'pfetch': 'app-misc/pfetch',
+            // No ebuild in the main tree.
+            'pfetch': null,
             'fastfetch': 'app-misc/fastfetch',
             'usbutils': 'sys-apps/usbutils',
             'timeshift': 'app-backup/timeshift',
-            'tor-browser': 'www-client/torbrowser-launcher',
+            /* Neither the launcher nor a browser package is in the main
+               tree. The Tor Project's own download is the route here. */
+            'tor-browser': null,
             'signal-desktop': 'net-im/signal-desktop-bin',
 
             /* Desktops and display servers. */
@@ -181,8 +186,243 @@
             /* No equivalent. The emitters check for null and explain the
                absence instead of substituting something that merely sounds
                similar. */
+
+            /* ── The ricing toolkit and the font choices ──────────────────
+               Every one of these is emitted by desktopPackages(), and none of
+               them was in this table, so each arrived at portage as a bare
+               Arch name. `emerge wofi` is not a request portage can satisfy:
+               without a category it stops and asks, and that is the good case.
+
+               Atoms resolved against packages.gentoo.org. The four that are
+               not in the main tree are null rather than pointed at something
+               with a similar name - wmcliphist and xfce4-clipman-plugin are
+               different programs from cliphist and clipman, and installing one
+               because it sounds like the other is the substitution this file
+               exists to refuse. The Hyprland companions live in an overlay. */
+            'wofi': 'gui-apps/wofi',
+            'polybar': 'x11-misc/polybar',
+            'mako': 'gui-apps/mako',
+            'dunst': 'x11-misc/dunst',
+            'feh': 'media-gfx/feh',
+            'picom': 'x11-misc/picom',
+            'swaylock': 'gui-apps/swaylock',
+            'swayidle': 'gui-apps/swayidle',
+            'grim': 'gui-apps/grim',
+            'slurp': 'gui-apps/slurp',
+            'flameshot': 'media-gfx/flameshot',
+            // Not in the main tree; the Hyprland ecosystem is carried in GURU.
+            'hyprpaper': null,
+            'hyprlock': null,
+            'hypridle': null,
+            // Not in the main tree, and the similarly named packages are
+            // unrelated programs rather than alternative builds.
+            'cliphist': null,
+            'clipman': null,
+            /* Plain Iosevka, which is what Arch's ttc-iosevka is. */
+            'ttc-iosevka': 'media-fonts/iosevka',
+            /* The Nerd Fonts patched builds are not packaged. The patch is the
+               reason to choose one - it carries the icon glyphs - so the plain
+               font is not a substitute for it. */
+            'ttf-firacode-nerd': null,
+            'ttf-cascadia-code-nerd': null,
+            'ttf-hack-nerd': null,
+
             'base': null,              // the stage3 tarball is the base system
             'zram-generator': null     // Gentoo configures zram through its own init scripts
+        },
+
+        /* Raspberry Pi OS is Debian, so these are Debian binary package names.
+
+           Every one was checked against the real indexes rather than
+           remembered: the Bookworm arm64 Packages file from deb.debian.org and
+           the Raspberry Pi archive's own from archive.raspberrypi.com, which is
+           where raspi-config, rpi-eeprom and the hardware-accelerated browser
+           builds come from. Raspberry Pi OS enables both, and the Pi archive is
+           pinned above Debian, so a name present in both resolves to the Pi
+           build. Three names that would have looked reasonable are not
+           available and are null below with the reason.
+
+           Debian splits and Arch merges, and the reverse, so several of these
+           are not one-to-one. Where a name would install something merely
+           similar, it is null and the guide says what to do instead. */
+        raspios: {
+            /* The image is the base system. There is no bootstrap to run and
+               nothing to install: the kernel, the firmware and the boot files
+               are written to the card with everything else. */
+            'base': null,
+            'linux-firmware': null,
+            'sudo': 'sudo',
+            'vim': 'vim',
+            'man-db': 'man-db',
+            'man-pages': 'manpages',
+            'texinfo': 'texinfo',
+            'btrfs-progs': 'btrfs-progs',
+            'xfsprogs': 'xfsprogs',
+            'cryptsetup': 'cryptsetup',
+            'lvm2': 'lvm2',
+            'networkmanager': 'network-manager',
+            'iwd': 'iwd',
+            /* The board boots from the bootloader in its EEPROM, which reads
+               config.txt and cmdline.txt off the firmware partition. There is
+               no UEFI, so no GRUB, no EFI boot manager and no Secure Boot
+               chain to sign into. */
+            'grub': null,
+            'efibootmgr': null,
+            'sbsigntools': null,
+            'efitools': null,
+            'shim-signed': null,
+            'os-prober': null,
+            'zsh': 'zsh',
+            'fish': 'fish',
+            // Microcode is an x86 concept. This is a Broadcom SoC.
+            'intel-ucode': null,
+            'amd-ucode': null,
+            'cronie': 'cron',
+            'opendoas': 'doas',
+            'ttf-jetbrains-mono': 'fonts-jetbrains-mono',
+            /* Debian packages the plain font and not the Nerd Fonts patched
+               build, so there is no name here that would install the patched
+               one. Fetching it from the Nerd Fonts release is the honest
+               route and the guide says so. */
+            'ttf-jetbrains-mono-nerd': null,
+            'base-devel': 'build-essential',
+            'terminus-font': 'xfonts-terminus',
+            'apparmor': 'apparmor',
+            'usbguard': 'usbguard',
+            'audit': 'auditd',
+            'fail2ban': 'fail2ban',
+            'lynis': 'lynis',
+            'unbound': 'unbound',
+            /* Dropped from Debian before Bookworm and back in Trixie, so on
+               Raspberry Pi OS 12 there is nothing to install under this name.
+               Stubby and Unbound both do DNS-over-TLS here. */
+            'dnscrypt-proxy': null,
+            'bind': 'bind9',
+            'dnsmasq': 'dnsmasq',
+            'stubby': 'stubby',
+            'dbus': 'dbus',
+            'snapper': 'snapper',
+            'ufw': 'ufw',
+            'nftables': 'nftables',
+            /* The Raspberry Pi archive builds both of these against the board's
+               video hardware. Debian's equivalents are firefox-esr and its own
+               chromium, and taking those instead gives up the acceleration. */
+            'firefox': 'firefox',
+            'chromium': 'chromium',
+            'mpv': 'mpv',
+            'thunar': 'thunar',
+            'btop': 'btop',
+            'openssh': 'openssh-server',
+            'docker': 'docker.io',
+            'git': 'git',
+            'neovim': 'neovim',
+            'ripgrep': 'ripgrep',
+            // Debian ships the binary as fdfind, to avoid a name collision.
+            'fd': 'fd-find',
+            'alacritty': 'alacritty',
+            'kitty': 'kitty',
+            'zsh-completions': 'zsh-syntax-highlighting',
+            'gvfs': 'gvfs',
+            'thunar-volman': 'thunar-volman',
+            'obs-studio': 'obs-studio',
+            'keepassxc': 'keepassxc',
+            'flatpak': 'flatpak',
+            'tmux': 'tmux',
+            'htop': 'htop',
+            'nautilus': 'nautilus',
+            'vlc': 'vlc',
+            'gimp': 'gimp',
+            'libreoffice-fresh': 'libreoffice',
+            'bluez': 'bluez',
+            'bluez-utils': 'bluez-tools',
+            'pipewire': 'pipewire',
+            'pipewire-pulse': 'pipewire-pulse',
+            'pipewire-alsa': 'pipewire-alsa',
+            'wireplumber': 'wireplumber',
+            'clamav': 'clamav',
+            'firejail': 'firejail',
+            // A pacman hook. Debian's equivalent is an apt hook you write.
+            'snap-pac': null,
+            'grub-btrfs': null,
+            'pfetch': null,
+            'fastfetch': null,
+            'usbutils': 'usbutils',
+            'timeshift': 'timeshift',
+            /* Not built for arm64 anywhere in Debian - the launcher is
+               published for amd64 and i386 only, because the Tor Browser
+               bundle it downloads is not released for this architecture. */
+            'tor-browser': null,
+            'signal-desktop': null,
+
+            /* Desktops and display servers. */
+            'gnome': 'gnome',
+            'gnome-tweaks': 'gnome-tweaks',
+            'gdm': 'gdm3',
+            'plasma-desktop': 'kde-plasma-desktop',
+            'sddm': 'sddm',
+            'xorg-server': 'xserver-xorg',
+            'xorg-xinit': 'xinit',
+            'xorg-xwayland': 'xwayland',
+            'wayland': 'libwayland-client0',
+            'libx11': 'libx11-6',
+            'libxinerama': 'libxinerama1',
+            'libxft': 'libxft2',
+            /* Hyprland reached Debian in unstable and is in neither Bookworm
+               nor Trixie, so Raspberry Pi OS 12 cannot install it from apt.
+               This is why Dusky is not offered here. */
+            'hyprland': null,
+            'waybar': 'waybar',
+            'rofi': 'rofi',
+            'wofi': 'wofi',
+            'mako': 'mako-notifier',
+            'dunst': 'dunst',
+            'picom': 'picom',
+            'feh': 'feh',
+            'grim': 'grim',
+            'slurp': 'slurp',
+            'flameshot': 'flameshot',
+
+            'unattended-upgrades': 'unattended-upgrades',
+            // Debian's own zram helper, rather than the systemd generator.
+            'zram-generator': 'zram-tools',
+
+            /* The ricing toolkit and the font choices, checked against the
+               Bookworm arm64 index the same way the rest of this table was.
+               Debian renames mako to mako-notifier; the Hyprland companions
+               and cliphist are not packaged at all, and clipman in Debian is
+               an Xfce panel plugin rather than the program of that name. */
+            'wofi': 'wofi',
+            'polybar': 'polybar',
+            'mako': 'mako-notifier',
+            'dunst': 'dunst',
+            'feh': 'feh',
+            'picom': 'picom',
+            'swaylock': 'swaylock',
+            'swayidle': 'swayidle',
+            'grim': 'grim',
+            'slurp': 'slurp',
+            'flameshot': 'flameshot',
+            /* Not in the Debian archive for this architecture. The three
+               Hyprland companions follow Hyprland itself, which is in unstable
+               only; cliphist is unpackaged, and Debian's clipman is an Xfce
+               panel plugin rather than the program of that name, so neither
+               gets pointed at something that merely shares a spelling. */
+            'hyprpaper': null,
+            'hyprlock': null,
+            'hypridle': null,
+            'cliphist': null,
+            'clipman': null,
+            /* Neither Iosevka nor the Nerd Fonts patched builds are in the
+               Debian archive for this architecture. Only the plain JetBrains
+               Mono is, and it is mapped above. */
+            'ttc-iosevka': null,
+            'ttf-firacode-nerd': null,
+            'ttf-cascadia-code-nerd': null,
+            'ttf-hack-nerd': null,
+
+            /* No Debian package. usbkill is a script from its own repository,
+               and anti-ducky covers the same ground here. */
+            'usbkill': null
         }
     };
 
@@ -541,6 +781,14 @@
     root.TOOL_SUPPORT = TOOL_SUPPORT;
     root.osToolSupport = toolSupport;
     root.osToolReason = toolReason;
+
+    /* Exported so a gate can compare the tables against each other. A system
+       whose map is missing a name the others translate does not fail loudly -
+       pkgName() falls through and returns the Arch name, so `apt-get install
+       networkmanager` is what reaches the reader. That is the same
+       wrong-tooling defect the rest of this file exists to prevent, in a form
+       no leakage count notices, so the key sets are held equal by test. */
+    root.OS_PKG_NAMES = PKG_NAMES;
 
     root.OS_INSTALL = OS_INSTALL;
     root.OS_INIT = INIT;
