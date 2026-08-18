@@ -80,6 +80,69 @@ for (const page of PAGES) {
     }
 }
 
+/* 7. A flex row that becomes a column on a phone must stretch its items.
+ *
+ * `align-items: flex-start` means two different things in the two directions.
+ * Down a row it stops a short sidebar growing to the height of the form beside
+ * it, which is what it is there for. Down a column it sizes each item to its
+ * own content instead of to the screen — so .generator-form came out 397px
+ * wide inside a 363px column and carried the whole page sideways with it, on
+ * every phone, for as long as the rule has existed.
+ *
+ * Structural rather than measured, because jsdom does no layout and this is
+ * exactly the shape that produced a real 28px overflow. Read from the
+ * stylesheet: any selector switched to a column inside a max-width query, whose
+ * cross-axis alignment is still flex-start when it gets there, is the bug.
+ */
+const rawSheet = fs.existsSync(path.join(WEB, 'style.css'))
+    ? fs.readFileSync(path.join(WEB, 'style.css'), 'utf8') : '';
+/* Comments out first. An earlier version anchored each rule on the `}` or `,`
+   before it, and a comment written above the rule was enough to hide it — a
+   gate that stops seeing what it guards the moment somebody explains it. */
+const sheet = rawSheet.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+/** Every declaration block for `selector`, in source order, up to `limit`. */
+function blocksFor(css, selector, limit) {
+    const text = limit === undefined ? css : css.slice(0, limit);
+    const re = new RegExp('\\' + selector + '\\s*\\{([^{}]*)\\}?', 'g');
+    const out = [];
+    let m;
+    while ((m = re.exec(text)) !== null) out.push(m[1]);
+    return out;
+}
+
+/** The last value `prop` takes for `selector` before `limit`, or null. */
+function lastValueFor(css, selector, prop, limit) {
+    let value = null;
+    for (const body of blocksFor(css, selector, limit)) {
+        const decl = new RegExp(prop + '\\s*:\\s*([^;}]+)').exec(body);
+        if (decl) value = decl[1].trim();
+    }
+    return value;
+}
+
+const columnRule = /\.([a-zA-Z0-9_-]+)\s*\{[^{}]*flex-direction\s*:\s*column/g;
+let cm;
+while ((cm = columnRule.exec(sheet)) !== null) {
+    const selector = '.' + cm[1];
+    // Only rules that live inside a narrow-viewport query.
+    const query = sheet.slice(0, cm.index).lastIndexOf('@media');
+    if (query === -1 || !/max-width/.test(sheet.slice(query, query + 120))) continue;
+
+    /* What align-items is by the time the column rule applies: whatever the
+       stylesheet last said for this selector at or before this point. The
+       column rule's own block is included, so setting both together passes. */
+    const endOfRule = sheet.indexOf('}', cm.index);
+    const align = lastValueFor(sheet, selector, 'align-items',
+                               endOfRule === -1 ? undefined : endOfRule + 1);
+    if (align === 'flex-start' || align === 'start') {
+        problems++;
+        report.push(`style.css: ${selector} becomes a column on a narrow screen while ` +
+                    `align-items is still ${align}, so its items are sized to their ` +
+                    `content instead of to the screen and the page scrolls sideways`);
+    }
+}
+
 console.log(`pages checked: ${PAGES.length}`);
 if (problems) {
     console.log(`\nISSUES (${problems}):`);

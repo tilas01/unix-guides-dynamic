@@ -1262,7 +1262,14 @@ noscript .js-only { display: none !important; }
     .wiki-content { padding: 1rem; }
     .nav-link { display: block; margin: 0.4rem 0; }
     .nav-sep { display: none; }
-    .layout-container { flex-direction: column; }
+    /* Stretch, not shrink-to-fit. `align-items: flex-start` is right for the
+       desktop row, where it stops the narrow sidebar growing to the height of
+       the form beside it. Once the row becomes a column that same value sizes
+       each item to its own content instead of to the screen, so the form came
+       out 397px wide inside a 363px column and pushed the whole page sideways.
+       Cross-axis alignment means opposite things in the two directions, which
+       is why one declaration cannot serve both. */
+    .layout-container { flex-direction: column; align-items: stretch; }
     .output-box { padding: 0.8rem; font-size: 0.8rem; border-radius: 12px; }
     .output-title { font-size: 0.95rem; }
     #header-controls { top: 8px; right: 10px; gap: 6px; }
