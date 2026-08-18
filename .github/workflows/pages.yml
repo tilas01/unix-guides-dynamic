@@ -229,6 +229,15 @@ jobs:
         run: npm run genos
         working-directory: tests
 
+      # The generator must not refuse to generate over a question it has itself
+      # withdrawn. Choosing "all the wallpapers" greys out the count and the
+      # split, and the required-field sweep went on demanding both, outlining
+      # two dropdowns that cannot be opened. jsdom does no layout, so this whole
+      # validation path was unreachable by every other gate.
+      - name: "Test: the generator never demands an unreachable answer"
+        run: npm run genvalid
+        working-directory: tests
+
       # Retired names must stay retired. anti-ducky's rename half-reverted once
       # and left a journalctl line naming a unit that never existed.
       - name: "Test: naming parity"

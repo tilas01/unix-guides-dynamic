@@ -1062,9 +1062,22 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
     // enumerating thirty untouched dropdowns is noise, not help.
     clearValidationState();
 
-    // Only fields the user can actually see are required.
+    /* Only fields the reader can actually see AND act on are required.
+
+       Visibility alone is not enough. A control this form has disabled is one
+       the form has already decided does not apply — choosing "All of them" for
+       the wallpapers answers both the count and the split, so both are greyed
+       out. They are still on screen, so an offsetParent test still counts them,
+       and the "No Selection Provided" option injected at load leaves them with
+       an empty value. Generation was refused with two options "still needing a
+       value" and the walk-to-next control landed on two dropdowns that cannot
+       be opened: a dead end with no way out of it from the page.
+
+       Demanding a value from a control the reader cannot reach is never right,
+       whatever put it in that state, so this is keyed on the state rather than
+       on the wallpaper questions specifically. */
     const requiredSelects = Array.from(document.querySelectorAll('#install-form select'))
-        .filter(sel => sel.offsetParent !== null);
+        .filter(sel => sel.offsetParent !== null && !sel.disabled);
 
     const missing = requiredSelects.filter(sel => !sel.value);
 
