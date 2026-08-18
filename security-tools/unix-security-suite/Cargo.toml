@@ -5,7 +5,7 @@ edition = "2021"
 description = "All five tilas01 security tools in a single binary, dispatched by subcommand."
 authors = ["tilas01"]
 license = "CC-BY-NC-SA-4.0"
-repository = "https://github.com/tilas01/unix-guides-dynamic"
+repository = "https://github.com/tilas01/Unix-SIT"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }

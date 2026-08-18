@@ -59,7 +59,7 @@ signing key by fingerprint, and refuses to install anything that fails either
 check:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh -o install.sh
 less install.sh          # read it before you run it
 sudo bash install.sh
 ```
@@ -69,8 +69,8 @@ independent check that does not require trusting any signing key at all:
 
 ```bash
 pacman -S rustup && rustup default stable
-git clone https://github.com/tilas01/unix-guides-dynamic.git
-cd unix-guides-dynamic/security-tools/anti-ducky
+git clone https://github.com/tilas01/Unix-SIT.git
+cd Unix-SIT/security-tools/anti-ducky
 cargo build --release --locked
 ```
 
@@ -174,4 +174,4 @@ attribution, under the same licence. See [LICENSE](../../LICENSE).
 
 Provided **AS IS, without warranty of any kind**. These tools can lock you out
 of your own machine if misconfigured. Read the
-[wiki](https://tilas01.github.io/unix-guides-dynamic/wiki.html) first.
+[wiki](https://tilas01.github.io/Unix-SIT/wiki.html) first.

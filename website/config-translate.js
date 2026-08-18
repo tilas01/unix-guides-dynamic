@@ -192,8 +192,8 @@
     function walkthroughToGenerator(wl) {
         var out = {
             version: 2,
-            generator: 'unix-guides-dynamic',
-            schema: 'unix-guides-dynamic/config',
+            generator: 'Unix-SIT',
+            schema: 'unix-sit/config',
             selects: {}, inputs: {}, checkboxes: {}
         };
         var mapped = [], unmapped = [];

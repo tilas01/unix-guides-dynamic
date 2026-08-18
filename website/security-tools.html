@@ -169,7 +169,7 @@
 </noscript>
 
 <header>
-    <a href="https://github.com/tilas01/unix-guides-dynamic" class="banner-link" target="_blank" rel="noopener">
+    <a href="https://github.com/tilas01/Unix-SIT" class="banner-link" target="_blank" rel="noopener">
         <img src="img/banner.png" alt="*nix Install Guides Banner" class="banner">
     </a>
     <nav class="main-nav">
@@ -231,7 +231,7 @@
         </div>
         <p class="api-note">
             Every published binary is GPG-signed and SHA-512 hashed. Import the public key
-            (<a href="https://github.com/tilas01/unix-guides-dynamic/blob/main/tilas01.asc" target="_blank" rel="noopener"><code>tilas01.asc</code></a>)
+            (<a href="https://github.com/tilas01/Unix-SIT/blob/main/tilas01.asc" target="_blank" rel="noopener"><code>tilas01.asc</code></a>)
             and verify before running anything —
             see <a href="wiki.html#verification">verification in the Wiki</a>.
         </p>
@@ -251,7 +251,7 @@
             installed but left <strong>stopped</strong>, so nothing starts watching or blocking
             until you have read its configuration and enabled it yourself.
         </p>
-        <pre class="output-box oneliner"><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh
+        <pre class="output-box oneliner"><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh
 
 # Always read a script before running it as root
 less install-security-suite.sh
@@ -262,7 +262,7 @@ sudo bash install-security-suite.sh --only libre-otp,anti-ducky
 sudo bash install-security-suite.sh --from-source   # build with cargo instead
 sudo bash install-security-suite.sh --uninstall</code></pre>
         <p style="font-size:0.82rem;">
-            <a href="https://github.com/tilas01/unix-guides-dynamic/blob/main/scripts/install-security-suite.sh" target="_blank" rel="noopener">Read the installer on GitHub →</a>
+            <a href="https://github.com/tilas01/Unix-SIT/blob/main/scripts/install-security-suite.sh" target="_blank" rel="noopener">Read the installer on GitHub →</a>
             ·
             <a href="wiki.html#suite-installer">How it works →</a>
         </p>
@@ -355,7 +355,7 @@ const THIRD_PARTY = [
     { value: 'usbkill', icon: '🔴', name: 'usbkill', destructive: true, desc: 'The original anti-forensic USB kill switch: watches for USB changes and powers the machine off immediately, with no confirmation. Unsaved work is lost. Prefer the generator’s built-in USB Kill Switch set to "lock session" unless you specifically need a hard power-off.', url: 'https://github.com/hephaest0s/usbkill', pkg: 'usbkill' }
 ];
 
-const REPO = 'tilas01/unix-guides-dynamic';
+const REPO = 'tilas01/Unix-SIT';
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ This is a highly optimized, asynchronous deployment tool designed for rapid, mul
 ### 🚀 One-Liner Quick Execution
 To automatically install the Rust toolchain, clone the repo, compile the binary, execute it, and seamlessly clean up all dependencies afterward, simply run this from the Arch ISO:
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/run-rust-installer.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/run-rust-installer.sh)"
 ```
 
 ### 🛠️ Manual Build Instructions
@@ -17,8 +17,8 @@ If you wish to audit and build the binary manually:
 ```bash
 pacman -Sy --needed rustup git
 rustup default stable
-git clone https://github.com/tilas01/unix-guides-dynamic.git
-cd unix-guides-dynamic/rust-installer
+git clone https://github.com/tilas01/Unix-SIT.git
+cd Unix-SIT/rust-installer
 cargo build --release
 ./target/release/arch-installer
 ```

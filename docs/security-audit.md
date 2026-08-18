@@ -251,7 +251,7 @@ command that does not do what the guide claims, a package that no longer exists,
 or documentation that describes behaviour the code does not have — please open an
 issue:
 
-**<https://github.com/tilas01/unix-guides-dynamic/issues>**
+**<https://github.com/tilas01/Unix-SIT/issues>**
 
 That includes disagreements. If this project and the Arch Wiki conflict, the Arch
 Wiki is right and this is a bug worth reporting.

@@ -130,8 +130,8 @@ for (const [slug, blurb, seed] of EXAMPLES) {
 
 const readme = `# Generated examples
 
-These are real output from the [manual walkthrough](https://tilas01.github.io/unix-guides-dynamic/manual.html)
-and the [generator](https://tilas01.github.io/unix-guides-dynamic/index.html),
+These are real output from the [manual walkthrough](https://tilas01.github.io/Unix-SIT/manual.html)
+and the [generator](https://tilas01.github.io/Unix-SIT/index.html),
 committed so you can read what they produce without running anything.
 
 Each example exists in both forms the site offers:

@@ -63,7 +63,21 @@ const RETIRED = [
       why: 'names a crate and a binary that no longer exist under that name' },
     { retired: 'Arch Security Suite',
       instead: 'Unix Security Suite',
-      why: 'describes the suite as Arch-only, which is no longer what it targets' }
+      why: 'describes the suite as Arch-only, which is no longer what it targets' },
+    /* The repository is Unix-SIT. The old name is not merely stale: the Pages
+       site moved with the repository, so every link written under the old
+       spelling now returns 404.
+
+       `allow` is the deliberate exception and it is narrow on purpose. The
+       retired string survives as the legacy configuration identifier, because
+       every config the site has handed out carries it and those are files
+       people keep. Reading it is a promise; writing it is the regression. */
+    { retired: 'unix-guides-dynamic',
+      instead: 'Unix-SIT',
+      why: 'names a repository and a Pages site that both 404 under that spelling',
+      allow: line => line.includes('unix-guides-dynamic/config') ||
+                     line.includes('CONFIG_SCHEMA_LEGACY') ||
+                     line.includes('CONFIG_GENERATOR_LEGACY') }
 ];
 
 /* Not retired, and not an oversight: `/etc/arch-security/` keeps its name.
@@ -153,11 +167,14 @@ for (const spec of RETIRED) {
         try { text = fs.readFileSync(f, 'utf8'); } catch (_) { continue; }
         // This gate necessarily contains the strings it forbids.
         if (path.resolve(f) === path.resolve(process.argv[1])) continue;
-        const lower = text.toLowerCase();
-        let at = lower.indexOf(needle);
-        while (at !== -1) {
-            hits.push(`${path.relative(ROOT, f)}:${text.slice(0, at).split('\n').length}`);
-            at = lower.indexOf(needle, at + needle.length);
+        const lines = text.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().indexOf(needle) === -1) continue;
+            // A named exception, judged against the line it appears on, so an
+            // allowance covers the one construction it was written for and not
+            // whatever else happens to sit near it.
+            if (spec.allow && spec.allow(lines[i])) continue;
+            hits.push(`${path.relative(ROOT, f)}:${i + 1}`);
         }
     }
     checks++;

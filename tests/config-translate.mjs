@@ -40,9 +40,22 @@ ok(!('partitioning' in weird.answers.selects), 'unknown encryption left unset, n
 ok(weird.unmapped.some(u=>u.startsWith('encryption=')), 'unknown encryption reported');
 
 // 5. envelope passthrough when already correct shape
-const env = { schema:'unix-guides-dynamic/config', version:2, source:'manual-walkthrough', answers:wl };
+const env = { schema:'unix-sit/config', version:2, source:'manual-walkthrough', answers:wl };
 ok(T.translateEnvelope(env,'manual-walkthrough').translated===false, 'no-op when shape matches');
 ok(T.translateEnvelope(env,'dynamic-generator').translated===true, 'translates when shape differs');
+
+/* 6. the name the project used before it became Unix-SIT.
+   Every configuration the site has handed out so far carries it, and those are
+   files people keep. Dropping it would turn a repository rename into a saved
+   install that silently stops loading. */
+const legacy = { schema:'unix-guides-dynamic/config', version:2,
+                 source:'manual-walkthrough', answers:wl };
+ok(T.translateEnvelope(legacy,'manual-walkthrough').translated===false,
+   'a config saved under the old project name is no longer recognised');
+ok(T.translateEnvelope(legacy,'dynamic-generator').translated===true,
+   'a config saved under the old project name no longer translates');
+ok(T.walkthroughToGenerator(wl).answers.schema === 'unix-sit/config',
+   'the translator still writes the retired schema id');
 
 console.log(`\nconfig-translate: ${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

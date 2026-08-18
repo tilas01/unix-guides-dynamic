@@ -20,12 +20,12 @@ fi
 
 if [ ! -f "${BINARY}.sha256" ]; then
     echo "⚠️ Warning: ${BINARY}.sha256 not found. Attempting to download..."
-    curl -sLO "https://github.com/tilas01/unix-guides-dynamic/releases/latest/download/${BINARY}.sha256"
+    curl -sLO "https://github.com/tilas01/Unix-SIT/releases/latest/download/${BINARY}.sha256"
 fi
 
 if [ ! -f "${BINARY}.asc" ]; then
     echo "⚠️ Warning: ${BINARY}.asc not found. Attempting to download..."
-    curl -sLO "https://github.com/tilas01/unix-guides-dynamic/releases/latest/download/${BINARY}.asc"
+    curl -sLO "https://github.com/tilas01/Unix-SIT/releases/latest/download/${BINARY}.asc"
 fi
 
 echo -e "\n[1/2] Verifying SHA-256 Hash..."
@@ -51,7 +51,7 @@ else
     # was a no-op and verification could never succeed.
     if [ ! -f "tilas01.asc" ]; then
         echo "Fetching the tilas01 signing key..."
-        curl -sLO "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/tilas01.asc"
+        curl -sLO "https://raw.githubusercontent.com/tilas01/Unix-SIT/main/tilas01.asc"
     fi
 
     # Pin the fingerprint. The key and the binary come from the same host, so a

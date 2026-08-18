@@ -228,7 +228,7 @@ if (hist.length) {
   // the generator reads the same shape.
   let cfg = null;
   try { cfg = JSON.parse(top.sc); } catch (_) { /* stays null */ }
-  ok(cfg && cfg.schema === 'unix-guides-dynamic/config',
+  ok(cfg && cfg.schema === 'unix-sit/config',
      'the saved entry has no valid config envelope');
   ok(cfg && cfg.answers && cfg.answers.desktop === 'dusky',
      'the saved config does not carry the answers that were given');

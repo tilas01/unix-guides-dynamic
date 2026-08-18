@@ -23,7 +23,7 @@ rustflags = [
     # Strip the build machine's paths out of the binary. Without this, panic
     # messages and debug strings contain /home/<whoever>/... and no two builds
     # can ever match.
-    "--remap-path-prefix=/home/runner/work/unix-guides-dynamic/unix-guides-dynamic=.",
+    "--remap-path-prefix=/home/runner/work/Unix-SIT/Unix-SIT=.",
     "--remap-path-prefix=/build=.",
 
     # Deterministic symbol mangling.

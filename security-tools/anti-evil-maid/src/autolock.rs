@@ -660,7 +660,7 @@ mod imp {
     fn write_units(secs: u64) -> std::io::Result<()> {
         let service = "[Unit]\n\
              Description=Suspend the LUKS volume (flush the master key from RAM)\n\
-             Documentation=https://tilas01.github.io/unix-guides-dynamic/\n\
+             Documentation=https://tilas01.github.io/Unix-SIT/\n\
              DefaultDependencies=no\n\
              \n\
              [Service]\n\
@@ -755,7 +755,7 @@ mod imp {
 
         let unit = "[Unit]\n\
              Description=Suspend the LUKS volume when the session locks\n\
-             Documentation=https://tilas01.github.io/unix-guides-dynamic/wiki.html#luks-autolock\n\
+             Documentation=https://tilas01.github.io/Unix-SIT/wiki.html#luks-autolock\n\
              After=dbus.service systemd-logind.service\n\
              Requires=dbus.service\n\
              \n\

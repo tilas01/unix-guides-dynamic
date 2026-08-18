@@ -708,7 +708,7 @@ udevadm control --reload-rules</code></pre>
             explicit about what it did not cover. If you find a real vulnerability, a
             command that does not do what the guide claims, a package that no longer
             exists, or documentation describing behaviour the code does not have,
-            please <a href="https://github.com/tilas01/unix-guides-dynamic/issues/new" target="_blank" rel="noopener">open an issue</a>.
+            please <a href="https://github.com/tilas01/Unix-SIT/issues/new" target="_blank" rel="noopener">open an issue</a>.
             Disagreements count too — where this project and the Arch Wiki conflict,
             the Arch Wiki is right and this is a bug.
         </p>
@@ -730,7 +730,7 @@ udevadm control --reload-rules</code></pre>
             <code>scripts/install-security-suite.sh</code> installs all five tools at once,
             so you do not have to fetch and verify each one by hand.
         </p>
-        <pre><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh
+        <pre><code class="language-bash">curl -fsSLO https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh
 
 # Read it first. It runs as root; you should know what it does.
 less install-security-suite.sh
@@ -1049,7 +1049,7 @@ sudo anti-ducky --export-whitelist   # check what it now trusts</code></pre>
                 <p style="color:#8b949e;"><em>Fetching live releases from GitHub...</em></p>
             </div>
             <div style="margin-top:1rem; text-align:center;">
-                <a id="github-releases-btn" href="https://github.com/tilas01/unix-guides-dynamic/releases" target="_blank" class="button" style="display:inline-block; padding:0.5rem 1rem; background:var(--accent-purple); color:white; text-decoration:none; border-radius:4px; font-weight:bold;">View All Releases on GitHub</a>
+                <a id="github-releases-btn" href="https://github.com/tilas01/Unix-SIT/releases" target="_blank" class="button" style="display:inline-block; padding:0.5rem 1rem; background:var(--accent-purple); color:white; text-decoration:none; border-radius:4px; font-weight:bold;">View All Releases on GitHub</a>
             </div>
         </div>
 
@@ -1077,7 +1077,7 @@ sudo anti-ducky --export-whitelist   # check what it now trusts</code></pre>
 
         <h3>Compile via Cargo</h3>
         <h4>Full Security Suite</h4>
-        <code>cargo install arch-rusty-security-suite --git https://github.com/tilas01/unix-guides-dynamic</code>
+        <code>cargo install arch-rusty-security-suite --git https://github.com/tilas01/Unix-SIT</code>
         <p>Installs the unified binary containing all modules.</p>
 
         <h4>Standalone Modules / Static Explanation</h4>
@@ -1557,12 +1557,12 @@ udevadm control --reload-rules</code></pre>
                 <h4 style="color:var(--accent-cyan); margin-top:0;">Offline / Direct Fallback Downloads</h4>
                 <p>GitHub API rate limit exceeded or connection failed. You can directly install the tools via cargo:</p>
                 <ul>
-                    <li><code>cargo install arch-rusty-security-suite --git https://github.com/tilas01/unix-guides-dynamic</code></li>
+                    <li><code>cargo install arch-rusty-security-suite --git https://github.com/tilas01/Unix-SIT</code></li>
                     
                     
                     
                 </ul>
-                <p><a href="https://github.com/tilas01/unix-guides-dynamic/releases" target="_blank" style="color:var(--accent-purple); font-weight:bold;">Or click here to manually view releases on GitHub.</a></p>
+                <p><a href="https://github.com/tilas01/Unix-SIT/releases" target="_blank" style="color:var(--accent-purple); font-weight:bold;">Or click here to manually view releases on GitHub.</a></p>
             </div>`;
 
             function renderWikiReleases(data) {
@@ -1609,7 +1609,7 @@ udevadm control --reload-rules</code></pre>
             }
 
             try {
-                const response = await fetch('https://api.github.com/repos/tilas01/unix-guides-dynamic/releases');
+                const response = await fetch('https://api.github.com/repos/tilas01/Unix-SIT/releases');
                 
                 if (!response.ok) {
                     container.innerHTML = fallbackHTML;

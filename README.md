@@ -4,10 +4,17 @@
   <img src="img/banners/unix-guides.png" width="100%" alt="*nix Install Guides banner">
 </p>
 
-<h1 align="center">🐧 *nix Install Guides</h1>
+<h1 align="center">🐧 Unix-SIT — *nix Install Guides</h1>
 
 <p align="center">
   <strong>A modular, dynamically generated, security-focused *nix-like installation system.</strong>
+</p>
+
+<p align="center">
+  <em><strong>S.I.T</strong> is <strong>Smart Installation Tool</strong>, so the name reads
+  either "Unix SIT" or, in full, "Unix Smart Installation Tool".<br>
+  <em>*nix Install Guides</em> is what the site calls itself; <em>Unix-SIT</em> is
+  the project and the repository.</em>
 </p>
 
 <p align="center">
@@ -18,7 +25,7 @@
 
 <p align="center">
   <strong>Most guides here are untested on real hardware.</strong> If something
-  is wrong, <a href="https://github.com/tilas01/unix-guides-dynamic/issues">open an issue</a> —
+  is wrong, <a href="https://github.com/tilas01/Unix-SIT/issues">open an issue</a> —
   feedback is genuinely wanted and is the fastest way this gets better.
 </p>
 
@@ -27,8 +34,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/tilas01/unix-guides-dynamic/actions/workflows/pages.yml"><img src="https://github.com/tilas01/unix-guides-dynamic/actions/workflows/pages.yml/badge.svg" alt="Pages Deploy"></a>
-  <a href="https://github.com/tilas01/unix-guides-dynamic/actions/workflows/release-all.yml"><img src="https://github.com/tilas01/unix-guides-dynamic/actions/workflows/release-all.yml/badge.svg" alt="Release Security Tools"></a>
+  <a href="https://github.com/tilas01/Unix-SIT/actions/workflows/pages.yml"><img src="https://github.com/tilas01/Unix-SIT/actions/workflows/pages.yml/badge.svg" alt="Pages Deploy"></a>
+  <a href="https://github.com/tilas01/Unix-SIT/actions/workflows/release-all.yml"><img src="https://github.com/tilas01/Unix-SIT/actions/workflows/release-all.yml/badge.svg" alt="Release Security Tools"></a>
 </p>
 
 ---
@@ -63,9 +70,9 @@ it.
 
 | | Route | Best for | Start here |
 |---|---|---|---|
-| **1** | ***nix Install Generator** — one form, get a script | You know what you want, and you are on a PC | **[Open the generator →](https://tilas01.github.io/unix-guides-dynamic/)** |
-| **2** | ***nix Install Walkthrough** — one question at a time, each explained | You are on mobile, or not yet sure what you want | **[Open the walkthrough →](https://tilas01.github.io/unix-guides-dynamic/manual.html)** |
-| **3** | **Website wiki** — the same options, explained, done by hand, with hyperlinks | You want to understand each step and follow along in a browser | **[Open the wiki →](https://tilas01.github.io/unix-guides-dynamic/wiki.html#manual-install)** |
+| **1** | ***nix Install Generator** — one form, get a script | You know what you want, and you are on a PC | **[Open the generator →](https://tilas01.github.io/Unix-SIT/)** |
+| **2** | ***nix Install Walkthrough** — one question at a time, each explained | You are on mobile, or not yet sure what you want | **[Open the walkthrough →](https://tilas01.github.io/Unix-SIT/manual.html)** |
+| **3** | **Website wiki** — the same options, explained, done by hand, with hyperlinks | You want to understand each step and follow along in a browser | **[Open the wiki →](https://tilas01.github.io/Unix-SIT/wiki.html#manual-install)** |
 | **4** | **This repo only** — plain markdown and README links, no website | Your machine is too slow for the site, has no JavaScript, or you prefer reading on GitHub | [Start at 01-pre-installation](docs/01-pre-installation.md) |
 
 Routes 1 and 2 cover the same install and produce the same kind of output — a
@@ -93,10 +100,10 @@ routes 1–2 stay tied to routes 3–4.
 
 ## 🌐 Hosted resources
 
-* **[Interactive install generator](https://tilas01.github.io/unix-guides-dynamic/)** — builds an install script and a markdown guide from your hardware and security choices.
-* **[Wiki](https://tilas01.github.io/unix-guides-dynamic/wiki.html)** — every generator option explained, plus the choose-your-own-path setup guide.
-* **[Security tools](https://tilas01.github.io/unix-guides-dynamic/security-tools.html)** — all the tools in one place, with live release statistics.
-* **[Live editor](https://tilas01.github.io/unix-guides-dynamic/live.html)** — edit a generated script and guide side by side before downloading.
+* **[Interactive install generator](https://tilas01.github.io/Unix-SIT/)** — builds an install script and a markdown guide from your hardware and security choices.
+* **[Wiki](https://tilas01.github.io/Unix-SIT/wiki.html)** — every generator option explained, plus the choose-your-own-path setup guide.
+* **[Security tools](https://tilas01.github.io/Unix-SIT/security-tools.html)** — all the tools in one place, with live release statistics.
+* **[Live editor](https://tilas01.github.io/Unix-SIT/live.html)** — edit a generated script and guide side by side before downloading.
 
 ### Reference
 
@@ -124,7 +131,7 @@ routes 1–2 stay tied to routes 3–4.
 The generator runs **after** your firmware. If someone can modify the firmware,
 none of it helps: they can capture your passphrase before the kernel exists.
 
-**[Hardware & Firmware Security →](https://tilas01.github.io/unix-guides-dynamic/wiki.html#hardware-security)**
+**[Hardware & Firmware Security →](https://tilas01.github.io/Unix-SIT/wiki.html#hardware-security)**
 covers, in order of value for money:
 
 1. **Locking down the firmware you already have** — free, reversible, do this first.
@@ -161,7 +168,7 @@ the raw RGBA blob each GUI binary embeds for its window icon. Regenerate with
 ### Install all of them in one step
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh
+curl -fsSLO https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh
 
 # Read it before running it as root
 less install-security-suite.sh
@@ -187,7 +194,7 @@ block login, so enabling them is a decision you make after reading the config.
 --uninstall                          # remove binaries and units
 ```
 
-Detail: [Installing the Suite in One Step](https://tilas01.github.io/unix-guides-dynamic/wiki.html#suite-installer)
+Detail: [Installing the Suite in One Step](https://tilas01.github.io/Unix-SIT/wiki.html#suite-installer)
 
 ### Third-party tools also wired into the generator
 

@@ -4,8 +4,8 @@
 set -e
 
 echo "[+] Fetching pre-compiled Reproducible Rust Build..."
-curl -sLO https://github.com/tilas01/unix-guides-dynamic/releases/download/latest/arch-installer-linux-x86_64
-curl -sLO https://github.com/tilas01/unix-guides-dynamic/releases/download/latest/arch-installer-linux-x86_64.sha256
+curl -sLO https://github.com/tilas01/Unix-SIT/releases/download/latest/arch-installer-linux-x86_64
+curl -sLO https://github.com/tilas01/Unix-SIT/releases/download/latest/arch-installer-linux-x86_64.sha256
 
 echo "[+] Verifying Hash Signature and GPG signature..."
 if sha256sum -c arch-installer-linux-x86_64.sha256; then
@@ -17,10 +17,10 @@ else
 fi
 
 echo "[+] Fetching GPG signature..."
-curl -sLO https://github.com/tilas01/unix-guides-dynamic/releases/download/latest/arch-installer-linux-x86_64.sig
+curl -sLO https://github.com/tilas01/Unix-SIT/releases/download/latest/arch-installer-linux-x86_64.sig
 
 echo "[+] Fetching official Public Key..."
-curl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/tilas01-public-key.asc" -o tilas01-public-key.asc
+curl -sL "https://raw.githubusercontent.com/tilas01/Unix-SIT/main/tilas01-public-key.asc" -o tilas01-public-key.asc
 gpg --import tilas01-public-key.asc 2>/dev/null || true
 
 echo "[+] Verifying GPG signature..."

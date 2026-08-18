@@ -37,7 +37,7 @@
 
     <script>
         const owner = 'tilas01';
-        const repo = 'unix-guides-dynamic';
+        const repo = 'Unix-SIT';
         const branch = 'main';
 
         async function fetchTree(path = '') {
@@ -133,14 +133,14 @@
             <div class="stat"><span id="gh-issues">🐛 Loading...</span> Issues</div>
         </div>
         <div style="display: flex; gap: 1rem;">
-            <a href="https://github.com/tilas01/unix-guides-dynamic" target="_blank" class="btn" style="background: var(--accent-blue); color: var(--bg-dark); text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold;">🔗 View on GitHub</a>
-            <a href="https://github.com/tilas01/unix-guides-dynamic/releases" target="_blank" class="btn" style="background: var(--accent-green); color: var(--bg-dark); text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold;">⬇️ Latest Releases</a>
+            <a href="https://github.com/tilas01/Unix-SIT" target="_blank" class="btn" style="background: var(--accent-blue); color: var(--bg-dark); text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold;">🔗 View on GitHub</a>
+            <a href="https://github.com/tilas01/Unix-SIT/releases" target="_blank" class="btn" style="background: var(--accent-green); color: var(--bg-dark); text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: bold;">⬇️ Latest Releases</a>
         </div>
     </div>
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            fetch('https://api.github.com/repos/tilas01/unix-guides-dynamic')
+            fetch('https://api.github.com/repos/tilas01/Unix-SIT')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('gh-stars').innerHTML = '⭐ ' + data.stargazers_count;

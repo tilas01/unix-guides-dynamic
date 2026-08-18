@@ -35,8 +35,8 @@ arch-chroot /mnt
 After rebooting into your new system, you can manually install the security suite.
 If you selected tools like **Libre-OTP** or **Anti-Evil-Maid**, clone the repository and compile them:
 ```bash
-cargo install --git https://github.com/tilas01/unix-guides-dynamic.git libre-otp
-cargo install --git https://github.com/tilas01/unix-guides-dynamic.git scarecrow
+cargo install --git https://github.com/tilas01/Unix-SIT.git libre-otp
+cargo install --git https://github.com/tilas01/Unix-SIT.git scarecrow
 ```
 
 > **Note on Compatibility:** Enabling `scarecrow` (LKM hooks) requires secure boot to be managed carefully or disabled, as the kernel will taint upon loading an out-of-tree module.

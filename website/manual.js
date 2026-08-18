@@ -614,7 +614,7 @@
                 sh: window.buildManualScript(state),
                 post: '',
                 sc: JSON.stringify({
-                    schema: 'unix-guides-dynamic/config',
+                    schema: 'unix-sit/config',
                     version: 2,
                     created: now.toISOString(),
                     source: 'manual-walkthrough',
@@ -920,7 +920,7 @@
             // interchange format that any tool can read, and the generator
             // accepts the same file.
             download('arch-config.json', JSON.stringify({
-                schema: 'unix-guides-dynamic/config',
+                schema: 'unix-sit/config',
                 version: 2,
                 created: new Date().toISOString(),
                 source: 'manual-walkthrough',

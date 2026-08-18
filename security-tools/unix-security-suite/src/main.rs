@@ -26,7 +26,7 @@ use std::process::ExitCode;
     about = "All five tilas01 security tools in one binary",
     long_about = None,
     after_help = "\
-Docs:      https://tilas01.github.io/unix-guides-dynamic/wiki.html#security-suite
+Docs:      https://tilas01.github.io/Unix-SIT/wiki.html#security-suite
 Verify:    gpg --verify unix-security-suite.sig unix-security-suite
 
 Provided AS IS with no warranty. Several of these can lock you out of your own
@@ -222,7 +222,7 @@ fn main() -> ExitCode {
             println!("  scarecrow  Scarecrow — canary tokens and sandbox spoofing");
             println!("\nEvery subcommand accepts --gui for that tool's interface,");
             println!("and falls back to the interactive CLI when no display is available.");
-            println!("\nDocs: https://tilas01.github.io/unix-guides-dynamic/wiki.html#security-suite");
+            println!("\nDocs: https://tilas01.github.io/Unix-SIT/wiki.html#security-suite");
             ExitCode::SUCCESS
         }
     }

@@ -20,8 +20,8 @@ override it — a different compiler produces different bytes, and reproducibili
 is the whole point.
 
 ```bash
-git clone https://github.com/tilas01/unix-guides-dynamic.git
-cd unix-guides-dynamic/security-tools
+git clone https://github.com/tilas01/Unix-SIT.git
+cd Unix-SIT/security-tools
 rustc --version    # should match rust-toolchain.toml
 ```
 
@@ -56,7 +56,7 @@ Two builds of the same commit should produce byte-identical output. To check a
 release against your own build:
 
 ```bash
-cd unix-guides-dynamic
+cd Unix-SIT
 git checkout <the-release-tag>
 cd security-tools/unix-security-suite
 
@@ -68,7 +68,7 @@ sha512sum target/release/unix-security-suite
 ```
 
 Compare that against the `.sha512` on the
-[release page](https://github.com/tilas01/unix-guides-dynamic/releases). If they
+[release page](https://github.com/tilas01/Unix-SIT/releases). If they
 match, the published binary was built from exactly this source.
 
 **If they do not match**, before assuming the worst, check:
@@ -82,7 +82,7 @@ match, the published binary was built from exactly this source.
   them changes the output.
 
 A genuine mismatch after all that is worth
-[opening an issue](https://github.com/tilas01/unix-guides-dynamic/issues).
+[opening an issue](https://github.com/tilas01/Unix-SIT/issues).
 
 ### What makes it reproducible
 

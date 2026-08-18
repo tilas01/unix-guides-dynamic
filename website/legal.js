@@ -173,8 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <p style="color:var(--fg-color,#a9b1d6); line-height:1.75; font-size:0.83rem; margin:0;">
           By continuing, you acknowledge and accept that all content, tools, scripts, binaries,
           documentation, and source code provided on this website and within the GitHub repository
-          <a href="https://github.com/tilas01/unix-guides-dynamic" target="_blank"
-             style="color:var(--accent-blue,#7aa2f7);">tilas01/unix-guides-dynamic</a> —
+          <a href="https://github.com/tilas01/Unix-SIT" target="_blank"
+             style="color:var(--accent-blue,#7aa2f7);">tilas01/Unix-SIT</a> —
           including but not limited to the *nix Install Guides generators, the Arch Rusty Security Suite (ARSS),
           Anti-Evil-Maid, Anti-Ducky, Kernel Watcher, LibreOTP, and Scarecrow —
           are provided strictly <strong>"AS IS"</strong>, without warranty of any kind, express or implied.

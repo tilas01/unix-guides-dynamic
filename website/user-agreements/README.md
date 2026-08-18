@@ -15,8 +15,8 @@ and so the welcome dialog has a stable, permanent thing to link to.
 They live inside `website/`, which *is* the published artifact — so there is one
 copy, not a build-time duplicate that can go stale, and both of these resolve:
 
-- <https://tilas01.github.io/unix-guides-dynamic/user-agreements/LEGAL-WAIVER.txt>
-- <https://github.com/tilas01/unix-guides-dynamic/blob/main/website/user-agreements/LEGAL-WAIVER.txt>
+- <https://tilas01.github.io/Unix-SIT/user-agreements/LEGAL-WAIVER.txt>
+- <https://github.com/tilas01/Unix-SIT/blob/main/website/user-agreements/LEGAL-WAIVER.txt>
 
 The welcome dialog links to the site-hosted copies, so the text a visitor agrees
 to comes from the same deployment they are looking at rather than from whatever

@@ -163,7 +163,7 @@ git config --global user.email "you@example.com"
 git config --global init.defaultBranch main
 
 # ── block 17 ──────────────────────────────────────────────────────────
-curl -fsSL https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh -o install.sh
 less install.sh          # read it before running it as root
 sudo bash install.sh --only libre-otp,anti-ducky,anti-evil-maid,kernel-watcher,scarecrow,aur-guard
 

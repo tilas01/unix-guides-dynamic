@@ -157,7 +157,7 @@ curl --proto '=https' --tlsv1.3 \
 Being honest about the boundary is part of the design:
 
 * **A compromised local machine.** If malware is already running as root, it can read the pins, the tokens and the plaintext before TLS sees it. Network hardening is not endpoint security.
-* **Firmware-level attackers.** See [Hardware & Firmware Security](https://tilas01.github.io/unix-guides-dynamic/wiki.html#hardware-security). Everything here runs after the firmware.
+* **Firmware-level attackers.** See [Hardware & Firmware Security](https://tilas01.github.io/Unix-SIT/wiki.html#hardware-security). Everything here runs after the firmware.
 * **A compromised signing key.** If the project's key leaks, signatures made with it mean nothing until it is revoked and replaced.
 * **Traffic analysis.** TLS hides content, not the fact that you contacted an endpoint or how much you sent.
 

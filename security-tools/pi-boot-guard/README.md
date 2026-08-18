@@ -134,4 +134,4 @@ and powered the machine off. A transient disk-full should not look like an attac
 ---
 
 Licensed CC BY-NC-SA 4.0. Part of the
-[*nix Install Guides](https://github.com/tilas01/unix-guides-dynamic) security suite.
+[*nix Install Guides](https://github.com/tilas01/Unix-SIT) security suite.

@@ -16,11 +16,11 @@ if not exist "%BINARY%" (
 )
 if not exist "%SHA_FILE%" (
     echo [i] Missing .sha256 file. Attempting to download...
-    curl -sLO "https://github.com/tilas01/unix-guides-dynamic/releases/latest/download/%SHA_FILE%"
+    curl -sLO "https://github.com/tilas01/Unix-SIT/releases/latest/download/%SHA_FILE%"
 )
 if not exist "%ASC_FILE%" (
     echo [i] Missing .asc file. Attempting to download...
-    curl -sLO "https://github.com/tilas01/unix-guides-dynamic/releases/latest/download/%ASC_FILE%"
+    curl -sLO "https://github.com/tilas01/Unix-SIT/releases/latest/download/%ASC_FILE%"
 )
 
 if not exist "%SHA_FILE%" (
@@ -53,7 +53,7 @@ if exist "%ASC_FILE%" (
     echo [2/2] Verifying GPG Signature...
     if not exist "%PUB_KEY%" (
         echo Public key not found locally. Downloading official key from GitHub...
-        curl -sL "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/tilas01-public-key.asc" -o "%PUB_KEY%"
+        curl -sL "https://raw.githubusercontent.com/tilas01/Unix-SIT/main/tilas01-public-key.asc" -o "%PUB_KEY%"
     )
     set GPG_INSTALLED_BY_SCRIPT=0
     where gpg >nul 2>nul

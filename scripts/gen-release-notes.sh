@@ -22,7 +22,7 @@ ASSETS="${2:?usage: gen-release-notes.sh <tag> <asset-dir>}"
 # fingerprint read out of the same release it is supposed to authenticate would
 # be worth nothing.
 readonly KEY_FPR="5CC1B2BED4D05F65E9E965423AA74BEC12F3D5ED"
-readonly SITE="https://tilas01.github.io/unix-guides-dynamic"
+readonly SITE="https://tilas01.github.io/Unix-SIT"
 
 # name|one line|what it needs
 readonly TOOLS=(
@@ -63,7 +63,7 @@ The installer verifies each binary's SHA-512 **and** its GPG signature, pins the
 signing key by fingerprint, and fails closed if either check does not pass.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main/scripts/install-security-suite.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/tilas01/Unix-SIT/main/scripts/install-security-suite.sh -o install.sh
 less install.sh          # read it before running it as root
 sudo bash install.sh                       # interactive picker
 sudo bash install.sh --only scarecrow,aur-guard
@@ -135,7 +135,7 @@ Each \`<tool>\` ships with a \`.sha512\`, a detached \`.sig\`, and an armoured
 
 ---
 
-Issues and suggestions are welcome: <https://github.com/tilas01/unix-guides-dynamic/issues>
+Issues and suggestions are welcome: <https://github.com/tilas01/Unix-SIT/issues>
 
 Built with [Claude Code](https://claude.com/claude-code).
 FOOTER

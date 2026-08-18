@@ -672,8 +672,8 @@ build from source there instead.
 
 ```bash
 # Download the latest release
-SUITE_VERSION=$(curl -s "https://api.github.com/repos/tilas01/unix-guides-dynamic/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
-BASE="https://github.com/tilas01/unix-guides-dynamic/releases/download/$SUITE_VERSION"
+SUITE_VERSION=$(curl -s "https://api.github.com/repos/tilas01/Unix-SIT/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+BASE="https://github.com/tilas01/Unix-SIT/releases/download/$SUITE_VERSION"
 curl -LO "$BASE/unix-security-suite"
 curl -LO "$BASE/unix-security-suite.sha256"
 curl -LO "$BASE/unix-security-suite.sig"
@@ -681,7 +681,7 @@ curl -LO "$BASE/unix-security-suite.sig"
 # Check the hash, then the signature. The hash proves the download is intact;
 # only the signature says who built it.
 sha256sum -c unix-security-suite.sha256
-curl -L "https://tilas01.github.io/unix-guides-dynamic/tilas01.asc" | gpg --import
+curl -L "https://tilas01.github.io/Unix-SIT/tilas01.asc" | gpg --import
 gpg --verify unix-security-suite.sig unix-security-suite
 
 # Install
@@ -794,5 +794,5 @@ pacman -Ss '^linux$' '^linux-hardened$' '^linux-zen$' '^linux-lts$'
 
 ---
 
-*Part of the [*nix Install Guides](https://github.com/tilas01/unix-guides-dynamic) wiki by [tilas01](https://github.com/tilas01).*
+*Part of the [*nix Install Guides](https://github.com/tilas01/Unix-SIT) wiki by [tilas01](https://github.com/tilas01).*
 *Dusky by [dusklinux](https://github.com/dusklinux/dusky). *

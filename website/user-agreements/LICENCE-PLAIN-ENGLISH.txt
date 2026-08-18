@@ -28,7 +28,7 @@ THE THREE CONDITIONS
 --------------------
 
   Attribution   Say where it came from. A link to
-                https://github.com/tilas01/unix-guides-dynamic is plenty.
+                https://github.com/tilas01/Unix-SIT is plenty.
                 If you changed something, say that you changed it, so nobody
                 blames the original for your edits.
 

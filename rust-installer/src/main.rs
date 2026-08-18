@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use tokio;
 use regex::Regex;
 
-const REPO_URL: &str = "https://raw.githubusercontent.com/tilas01/unix-guides-dynamic/main";
+const REPO_URL: &str = "https://raw.githubusercontent.com/tilas01/Unix-SIT/main";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

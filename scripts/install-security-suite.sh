@@ -38,7 +38,7 @@
 #                 Anything a system genuinely cannot run is refused by name
 #                 with the reason, never silently skipped.
 #
-# Author: tilas01 · https://github.com/tilas01/unix-guides-dynamic
+# Author: tilas01 · https://github.com/tilas01/Unix-SIT
 # Licence: CC BY-NC-SA 4.0
 #
 # Provided AS IS with no warranty. These tools can lock you out of your own
@@ -48,7 +48,7 @@ set -Eeuo pipefail
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-readonly REPO="tilas01/unix-guides-dynamic"
+readonly REPO="tilas01/Unix-SIT"
 readonly KEY_URL="https://raw.githubusercontent.com/${REPO}/main/tilas01.asc"
 
 # The signing key is pinned by fingerprint, not merely downloaded.
@@ -640,5 +640,5 @@ for name in "${SELECTED[@]}"; do
     echo
 done
 
-dim "Full documentation: https://tilas01.github.io/unix-guides-dynamic/wiki.html#security-suite"
+dim "Full documentation: https://tilas01.github.io/Unix-SIT/wiki.html#security-suite"
 dim "Uninstall:          $0 --uninstall"
