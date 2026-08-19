@@ -167,6 +167,148 @@
         return { apps: apps, extra: extra };
     }
 
+    /* ── Systems that ship an image rather than an installer ─────────────────
+       Raspberry Pi OS is the first of these and the reason this exists. There
+       is no live environment to boot, nothing to partition and no base system
+       to bootstrap: the card is written from a published image that already
+       holds the filesystem, and the first shell you get is on the running
+       board. Sections 1 to 3 of the ordinary guide have nothing to describe,
+       so they are replaced rather than translated.
+
+       Everything from section 4 onward is shared, because by then both kinds
+       of install are the same thing — a booted system being configured. */
+    function imagedInstall(L, s, f, M, os) {
+        const im = M.imaged;
+        const boot = M.espMount;
+
+        L.push('## 1. Write the image to the card');
+        L.push('');
+        L.push('There is no installer to boot. ' + os.label + ' is published as a');
+        L.push('complete filesystem image, and installing it means writing that image to');
+        L.push('an SD card or a USB disk from another machine. Nothing is partitioned and');
+        L.push('nothing is bootstrapped: the first thing that runs is the finished system.');
+        L.push('');
+        L.push('1. Get the image from <' + im.imagesUrl + '>.');
+        L.push('2. Verify it before you write it. The');
+        L.push('   [verifier](https://tilas01.github.io/Unix-SIT/iso-verify.html) will');
+        L.push('   hash it in your browser.');
+        L.push('3. Write it with **' + im.tool + '** (<' + im.toolUrl + '>), which is also');
+        L.push('   where the settings below are entered.');
+        L.push('');
+        L.push('> **Everything on the card is destroyed.** The imaging tool does not ask');
+        L.push('> twice either, and a card reader that shows up as your system disk has');
+        L.push('> ruined somebody\'s afternoon before. Check the device it names.');
+        L.push('');
+
+        /* The Imager's advanced options are the supported substitute for a
+           chroot. Saying so plainly matters: a reader who has installed Arch
+           will look for the step where they set a hostname and a user, and on
+           this system that step happens before the card ever boots. */
+        L.push('### Set it up before the first boot');
+        L.push('');
+        L.push('Open the advanced options in ' + im.tool + ' (the gear, or');
+        L.push('<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>) and fill in:');
+        L.push('');
+        L.push('| Setting | Value |');
+        L.push('|---|---|');
+        L.push('| Hostname | `' + esc(s.hostname) + '` |');
+        L.push('| Username | `' + esc(s.username) + '` |');
+        L.push('| Password | one you choose now |');
+        L.push('| SSH | ' + (has(s.apps, 'openssh')
+                    ? 'enabled, **public-key only**' : 'leave off unless you need it') + ' |');
+        L.push('| Locale | `' + esc(s.locale) + '`, keyboard `' + esc(s.keymap) + '` |');
+        L.push('| Time zone | `' + esc(s.timezone) + '` |');
+        L.push('');
+        L.push('This is the step a chroot does on other systems. It writes');
+        L.push('`' + im.firstBoot.userconf + '` and, if you asked for it, `' +
+               im.firstBoot.ssh + '` onto the boot partition, and the first boot reads');
+        L.push('them and then deletes them.');
+        L.push('');
+        L.push('> **There is no default password to fall back on.** Raspberry Pi OS has');
+        L.push('> shipped without the old `pi`/`raspberry` account since 2022 precisely');
+        L.push('> because everyone knew it. If you skip the user here the board boots to a');
+        L.push('> setup wizard on the screen, which is fine with a monitor attached and a');
+        L.push('> dead end without one.');
+        L.push('');
+        if (has(s.apps, 'openssh')) {
+            L.push('> You asked for SSH. Enable it with a **public key**, not a password —');
+            L.push('> a Pi is usually the machine left plugged in somewhere, and a');
+            L.push('> password-authenticated SSH port on a board nobody looks at is the');
+            L.push('> single most attacked thing in this guide.');
+            L.push('');
+        }
+
+        L.push('## 2. First boot');
+        L.push('');
+        L.push('Put the card in, power the board, and log in as `' + esc(s.username) + '`.');
+        L.push('');
+        L.push('```bash');
+        L.push('# The image is sized for the smallest supported card, so the root');
+        L.push('# filesystem does not fill the one you actually used.');
+        L.push('sudo ' + im.expand);
+        L.push('');
+        L.push('# Everything published since the image was built.');
+        L.push('sudo ' + M.upgrade);
+        L.push('```');
+        L.push('');
+        L.push('> Expand before you install anything. A card that fills up part way');
+        L.push('> through an upgrade leaves dpkg half-configured, and recovering from that');
+        L.push('> on a headless board is worse than starting again.');
+        L.push('');
+        if (f.enc) {
+            /* The reader asked for encryption on a system that does not offer
+               it. Saying "not covered" and stopping would be the honest
+               minimum; saying what it would actually take is better, and
+               pretending the Arch steps apply would be the defect. */
+            L.push('> [!CAUTION]');
+            L.push('> **You chose full-disk encryption, and this system does not do it.**');
+            L.push('> There is no installer option for it and the published image boots');
+            L.push('> unencrypted. It is possible — ' + M.fde.mechanism + ', with the root');
+            L.push('> filesystem copied into a new encrypted volume and the initramfs');
+            L.push('> rebuilt to unlock it — but that is a rebuild of the system after the');
+            L.push('> fact, not a setting, and the steps elsewhere in this project are for');
+            L.push('> a machine that was encrypted before anything was written to it.');
+            L.push('>');
+            L.push('> **They do not transfer, and this guide will not pretend they do.**');
+            L.push('> The board also has no way to enter a passphrase without a keyboard');
+            L.push('> and a screen attached, so a headless Pi needs a network unlock as');
+            L.push('> well. Treat it as a separate project and read the authority first:');
+            L.push('> <' + M.authority + '>.');
+            L.push('');
+        }
+
+        L.push('## 3. Configure the board');
+        L.push('');
+        L.push('`' + im.configure + '` is the supported way to change the things that are');
+        L.push('specific to this hardware. It edits the same files by hand underneath.');
+        L.push('');
+        L.push('```bash');
+        L.push('sudo ' + im.configure + '');
+        L.push('#   System Options   hostname, boot behaviour, network at boot');
+        L.push('#   Interface Options SSH, SPI, I2C, the camera');
+        L.push('#   Performance      GPU memory split, overclock');
+        L.push('#   Localisation     locale, time zone, keyboard, wifi country');
+        L.push('```');
+        L.push('');
+        L.push('> The wifi country is not cosmetic. The radio stays disabled until it is');
+        L.push('> set, because the legal channel list depends on it, and "wifi does not');
+        L.push('> work on a new Pi" is this setting more often than it is anything else.');
+        L.push('');
+        L.push('The boot partition is mounted at `' + boot + '`, and it is a plain FAT');
+        L.push('partition rather than an EFI system partition. Two files on it decide how');
+        L.push('the board starts:');
+        L.push('');
+        L.push('```bash');
+        L.push('cat ' + boot + '/config.txt      # firmware settings, one per line');
+        L.push('cat ' + boot + '/cmdline.txt     # the kernel command line, all on ONE line');
+        L.push('```');
+        L.push('');
+        L.push('> `cmdline.txt` is a single line. A newline in it is not a formatting');
+        L.push('> nicety — everything after the first line is ignored, so an edit that');
+        L.push('> looks tidy silently drops half the kernel command line.');
+        L.push('');
+    }
+
     /* ── Markdown ───────────────────────────────────────────────────────── */
 
     function buildManualGuide(s) {
@@ -299,16 +441,29 @@
         }
 
         /* ── 0. Before you boot ── */
-        L.push('## 0. Before you boot the installer');
+        L.push('## 0. Before you start');
         L.push('');
         L.push('1. **Verify the image.** Hash it, and get the checksum from a host other');
         L.push('   than the one that served the image — a server that lies about the');
         L.push('   image can hand you a checksum that matches the lie.');
         L.push('   [Verifier](https://tilas01.github.io/Unix-SIT/iso-verify.html).');
-        L.push('2. **Lock the firmware down.** Update it, set a supervisor password,');
-        L.push('   disable USB and network boot. Without a supervisor password every');
-        L.push('   other setting is one unlocked menu away from being undone.');
-        L.push('3. **Back up anything you cannot lose** — not to the disk below.');
+        if (M && M.eeprom) {
+            /* A supervisor password and a boot order are things a PC firmware
+               setup has and this board does not. Printing that advice here
+               would send a reader looking for a menu that is not there, and
+               leave the thing that does matter - the bootloader in the EEPROM -
+               unmentioned. */
+            L.push('2. **Update the bootloader in the EEPROM.** It runs before anything');
+            L.push('   you control and it is not a setup menu: there is no supervisor');
+            L.push('   password and no boot order to lock, so keeping the firmware current');
+            L.push('   and turning on verified boot is what takes its place. Section 5.');
+        } else {
+            L.push('2. **Lock the firmware down.** Update it, set a supervisor password,');
+            L.push('   disable USB and network boot. Without a supervisor password every');
+            L.push('   other setting is one unlocked menu away from being undone.');
+        }
+        L.push('3. **Back up anything you cannot lose** — not to the ' +
+               ((M && M.imaged) ? 'card' : 'disk') + ' below.');
         if (f.dual) {
             L.push('4. **Dual boot preparation**, because the other system is staying:');
             if (s.dualboot === 'windows') {
@@ -351,495 +506,560 @@
         }
         L.push('');
 
-        /* ── 1. Boot ── */
-        L.push('## 1. Boot the installer and get a network');
-        L.push('');
-        L.push('```bash');
-        if (s.keymap && s.keymap !== 'us') L.push('loadkeys ' + s.keymap);
-        if (!f.arm) L.push('ls /sys/firmware/efi && echo UEFI   # confirms firmware mode');
-        L.push('');
-        L.push('# Wireless, if you need it:');
-        L.push('iwctl station wlan0 connect YOUR_SSID');
-        L.push('');
-        L.push('ping -c3 archlinux.org');
-        L.push('timedatectl set-ntp true');
-        L.push('```');
-        L.push('');
-        if (f.arm) {
-            L.push('> **ARM is different here.** Arch Linux ARM does not ship a bootable');
-            L.push('> installer ISO. You prepare the storage from another machine and');
-            L.push('> extract a per-board rootfs tarball onto it, then boot into the');
-            L.push('> installed system. Steps 2 and 3 below run on the *other* machine.');
-            L.push('> Mirror selection below is Arch-proper only; Arch Linux ARM uses its');
-            L.push('> own mirror list at /etc/pacman.d/mirrorlist. See');
-            L.push('> <https://archlinuxarm.org/platforms> for your board.');
-            L.push('');
-        } else if (M && M.family === 'gentoo') {
-            /* Gentoo has no reflector and no /etc/pacman.d/mirrorlist. Mirrors
-               are a make.conf variable, chosen with mirrorselect, and the
-               package *tree* is a separate thing again from the mirrors that
-               serve distfiles. */
-            const httpsOnlyG = s.mirror_https !== 'no';
-            L.push('### Pick fast package mirrors');
-            L.push('');
-            L.push('```bash');
-            L.push('emerge --verbose --oneshot app-portage/mirrorselect');
-            L.push('');
-            L.push('# Interactive: pick from the list, closest first.');
-            L.push('mirrorselect -i -o >> /mnt/gentoo/etc/portage/make.conf');
-            L.push('');
-            L.push('# Or automatic: the ' +
-                   (httpsOnlyG ? 'ten fastest HTTPS mirrors' : 'ten fastest mirrors') + '.');
-            L.push('mirrorselect -s10' + (httpsOnlyG ? ' -H' : '') +
-                   ' -o >> /mnt/gentoo/etc/portage/make.conf');
-            L.push('```');
-            L.push('');
-            L.push('> This writes a `GENTOO_MIRRORS=` line. Check it before you rely on');
-            L.push('> it — `mirrorselect` appends, so running it twice leaves two, and');
-            L.push('> the later one wins in a way that is easy to miss.');
-            L.push('');
-            if (!httpsOnlyG) {
-                L.push('> You allowed plain HTTP mirrors. Distfiles are verified against the');
-                L.push('> digests in the tree, so this is not an integrity risk — but anyone');
-                L.push('> on the path can see which packages you build. HTTPS hides that.');
-                L.push('');
-            }
-            L.push('The package tree itself is separate from these mirrors and is synced');
-            L.push('in the chroot below, with `emerge-webrsync`.');
-            L.push('');
+        /* ── 1 to 3, or the image ────────────────────────────────────────
+           A system that publishes a filesystem image has no installer to boot,
+           nothing to partition and no base system to bootstrap, so these three
+           sections are replaced rather than reworded. Everything from section
+           4 down is shared: by then both kinds of install are the same thing,
+           a booted system being configured. */
+        if (M && M.imaged) {
+            imagedInstall(L, s, f, M, os);
         } else {
-            // Mirror selection with reflector. Only on Arch-proper (x86_64):
-            // Arch Linux ARM has a separate mirror system.
-            const httpsOnly = s.mirror_https !== 'no';
-            const country = s.mirror_country && s.mirror_country !== 'auto'
-                ? s.mirror_country : null;
-            L.push('### Pick fast package mirrors');
-            L.push('');
-            L.push('```bash');
-            L.push('pacman -Sy --noconfirm reflector');
-            const parts = ['reflector'];
-            if (country) parts.push('--country ' + country);
-            parts.push('--age 12');            // synced in the last 12 hours
-            parts.push('--latest 20');         // the 20 most-recently-synced
-            if (httpsOnly) parts.push('--protocol https');
-            parts.push('--sort rate');         // then rank those by download speed
-            parts.push('--save /etc/pacman.d/mirrorlist');
-            // Wrap the reflector line for readability rather than one long line.
-            L.push(parts.join(' \\\n    '));
-            L.push('');
-            L.push('# --sort rate downloads from each candidate to measure real speed,');
-            L.push('# so this takes a minute. --age 12 and --latest 20 keep only mirrors');
-            L.push('# that are both fresh and fast.' +
-                   (httpsOnly ? ' --protocol https keeps it to encrypted mirrors.' : ''));
-            L.push('```');
-            L.push('');
-            if (!httpsOnly) {
-                L.push('> You allowed HTTP mirrors. Package **contents** are still verified');
-                L.push('> by pacman\'s signatures, so this is not an integrity risk — but');
-                L.push('> anyone on the path can see which packages you install. HTTPS');
-                L.push('> hides that.');
-                L.push('');
-            }
-        }
 
-        /* ── 2. Partition ── */
-        L.push('## 2. Partition `' + f.disk + '`');
-        L.push('');
-        L.push('```bash');
-        L.push('lsblk                       # identify the disk by size and model. Twice.');
-        L.push('```');
-        L.push('');
-        if (f.dual && f.dualFirst) {
-            L.push('This system is going on **first**, so nothing needs shrinking. Give it a');
-            L.push('fixed size and leave the rest of the disk unpartitioned — the other');
-            L.push('installer will find that free space and claim it.');
-            L.push('');
-            L.push('> Leave the room now. Taking it back later means shrinking a filesystem');
-            L.push('> that is full of your data, which is the work this ordering exists to');
-            L.push('> avoid.');
+            /* ── 1. Boot ── */
+            L.push('## 1. Boot the installer and get a network');
             L.push('');
             L.push('```bash');
-            L.push('gdisk ' + f.disk);
-            L.push('#   n → 1 → +512M → type ef00        # this system\'s own ESP');
-            L.push('#   n → 2 → a size you choose → type 8300');
-            L.push('#   w → write');
-            L.push('#');
-            L.push('# Do NOT give partition 2 the rest of the disk. Whatever is left');
-            L.push('# unpartitioned is what the other system gets.');
+            if (s.keymap && s.keymap !== 'us') L.push('loadkeys ' + s.keymap);
+            if (!f.arm) L.push('ls /sys/firmware/efi && echo UEFI   # confirms firmware mode');
+            L.push('');
+            L.push('# Wireless, if you need it:');
+            L.push('iwctl station wlan0 connect YOUR_SSID');
+            L.push('');
+            L.push('ping -c3 archlinux.org');
+            L.push('timedatectl set-ntp true');
             L.push('```');
             L.push('');
-        } else if (f.dual) {
-            L.push('You are keeping another operating system, so you are **adding** a');
-            L.push('partition rather than repartitioning. Shrink the existing one from');
-            L.push('that system\'s own tools first — Windows Disk Management, or GParted');
-            L.push('for Linux — then create one Linux partition in the free space.');
-            L.push('');
-            L.push('```bash');
-            L.push('gdisk ' + f.disk);
-            if (f.espShared) {
-                L.push('#   n → next free number → rest of free space → type 8300');
-                L.push('#   w → write');
-                L.push('#');
-                L.push('# Do NOT touch ' + esc(s.dualboot_esp) + '. That is the existing ESP and it is shared.');
-                L.push('```');
+            if (f.arm) {
+                L.push('> **ARM is different here.** Arch Linux ARM does not ship a bootable');
+                L.push('> installer ISO. You prepare the storage from another machine and');
+                L.push('> extract a per-board rootfs tarball onto it, then boot into the');
+                L.push('> installed system. Steps 2 and 3 below run on the *other* machine.');
+                L.push('> Mirror selection below is Arch-proper only; Arch Linux ARM uses its');
+                L.push('> own mirror list at /etc/pacman.d/mirrorlist. See');
+                L.push('> <https://archlinuxarm.org/platforms> for your board.');
                 L.push('');
-                L.push('> You are sharing the other system\'s EFI partition. It is **mounted,');
-                L.push('> never formatted** — formatting it deletes that system\'s bootloader.');
-                if (has(s.security_tools, 'anti-evil-maid')) {
-                    /* The reader picked a tool whose whole job is noticing
-                       changes to this partition, and then chose to share it
-                       with a system that rewrites it unpredictably. Both are
-                       legitimate; the combination needs saying out loud. */
-                    L.push('>');
-                    L.push('> **You also selected anti-evil-maid.** It baselines this partition');
-                    L.push('> and reports changes, and the other system writes here too — so');
-                    L.push('> its updates will read as tampering. Re-baseline with');
-                    L.push('> `anti-evil-maid --setup` after each one, or the alerts stop');
-                    L.push('> meaning anything. A separate EFI partition avoids this entirely.');
-                }
+            } else if (M && M.family === 'gentoo') {
+                /* Gentoo has no reflector and no /etc/pacman.d/mirrorlist. Mirrors
+                   are a make.conf variable, chosen with mirrorselect, and the
+                   package *tree* is a separate thing again from the mirrors that
+                   serve distfiles. */
+                const httpsOnlyG = s.mirror_https !== 'no';
+                L.push('### Pick fast package mirrors');
                 L.push('');
-            } else {
-                L.push('#   n → next free number → +512M → type ef00   (this system\'s ESP)');
-                L.push('#   n → next free number → rest of free space → type 8300');
-                L.push('#   w → write');
-                L.push('#');
-                L.push('# Leave the other system\'s ESP alone. This makes a second one.');
-                L.push('```');
-                L.push('');
-                L.push('> The new partition is formatted with the others below. Check its');
-                L.push('> path twice before you get there: `mkfs.fat` aimed at the *other*');
-                L.push('> system\'s ESP destroys its bootloader, which is the exact failure a');
-                L.push('> second partition exists to avoid.');
-                L.push('');
-                L.push('> The UEFI specification allows more than one EFI system partition,');
-                L.push('> and the firmware boots whichever its boot entry names. You pick');
-                L.push('> between the two systems in the firmware boot menu. If your firmware');
-                L.push('> only ever offers the first ESP it finds — a few do — put the');
-                L.push('> bootloaders on the shared one and keep the kernel and initramfs on');
-                L.push('> a separate `/boot`, which keeps the measured files out of the other');
-                L.push('> system\'s reach just as well.');
-                L.push('');
-            }
-        } else {
-            L.push('```bash');
-            L.push('gdisk ' + f.disk);
-            L.push('#   o → new GPT (destroys the existing table)');
-            L.push('#   n → 1 → +' + (s.bootloader === 'uki' ? '1G' : '512M') + ' → type ef00   (EFI system partition)');
-            L.push('#   n → 2 → rest        → type 8300   (Linux filesystem)');
-            L.push('#   w → write');
-            if (s.bootloader === 'uki') {
-                L.push('#');
-                L.push('# 1 GiB rather than 512 MiB: a unified kernel image bundles the kernel');
-                L.push('# and initramfs into one EFI file, and two of those plus a fallback');
-                L.push('# does not fit in 512 MiB.');
-            }
-            L.push('```');
-        }
-        L.push('');
-
-        if (f.enc) {
-            L.push('### Encrypt');
-            L.push('');
-            L.push('```bash');
-            if (s.encryption === 'luks2') {
-                L.push('cryptsetup luksFormat --type luks2 --pbkdf argon2id ' + f.root);
-            } else {
-                L.push('cryptsetup luksFormat --type luks1 ' + f.root);
-                L.push('# LUKS1 uses PBKDF2, not Argon2id: a weak passphrase falls far');
-                L.push('# faster to a GPU. Use a long one.');
-            }
-            L.push('cryptsetup open ' + f.root + ' cryptroot');
-            L.push('```');
-            L.push('');
-            L.push('> The passphrase you set here is the one standing between a stolen');
-            L.push('> machine and every file on it. There is no recovery if you forget it.');
-            L.push('');
-        }
-
-        L.push('### Format and mount');
-        L.push('');
-        L.push('```bash');
-        /* Keyed on whether the partition is *shared*, not on whether this is a
-           dual boot. A second ESP made for this system is ours to format; the
-           other system's never is. */
-        if (!f.espShared) {
-            L.push('mkfs.fat -F32' + (f.dual ? ' -n LINUXESP' : '') + ' ' + f.esp);
-        } else {
-            L.push('# ' + f.esp + ' is the existing ESP. It is NOT formatted.');
-        }
-        if (f.btrfs) {
-            L.push('mkfs.btrfs -f ' + f.rootDev);
-            L.push('');
-            L.push('mount ' + f.rootDev + ' /mnt');
-            L.push('btrfs subvolume create /mnt/@');
-            L.push('btrfs subvolume create /mnt/@home');
-            L.push('btrfs subvolume create /mnt/@log');
-            L.push('btrfs subvolume create /mnt/@pkg');
-            L.push('btrfs subvolume create /mnt/@snapshots');
-            L.push('umount /mnt');
-            L.push('');
-            /* The package cache and the EFI mount point are per-system.
-               Gentoo keeps binary packages in var/cache/binpkgs and mounts the
-               ESP at /efi with /boot on the root filesystem; Arch does neither.
-               A subvolume named after another system's package manager is the
-               small, embarrassing kind of leak this reads as. */
-            const cache = (M && M.pkgCache) || 'var/cache/pacman/pkg';
-            const espAt = ((M && M.espMount) || '/boot').replace(/^\//, '');
-            L.push('O="noatime,compress=zstd:3,space_cache=v2"');
-            L.push('mount -o $O,subvol=@          ' + f.rootDev + ' /mnt');
-            L.push('mkdir -p /mnt/{home,var/log,' + cache + ',.snapshots,' + espAt + '}');
-            L.push('mount -o $O,subvol=@home      ' + f.rootDev + ' /mnt/home');
-            L.push('mount -o $O,subvol=@log       ' + f.rootDev + ' /mnt/var/log');
-            L.push('mount -o $O,subvol=@pkg       ' + f.rootDev + ' /mnt/' + cache);
-            L.push('mount -o $O,subvol=@snapshots ' + f.rootDev + ' /mnt/.snapshots');
-            L.push('mount ' + f.esp + ' /mnt/' + espAt);
-        } else {
-            L.push('mkfs.' + (s.filesystem === 'xfs' ? 'xfs -f' : 'ext4') + ' ' + f.rootDev);
-            L.push('mount ' + f.rootDev + ' /mnt');
-            L.push('mkdir -p /mnt/boot');
-            L.push('mount ' + f.esp + ' /mnt/boot');
-        }
-        L.push('```');
-        L.push('');
-        if (f.btrfs) {
-            L.push('> `@log` and `@pkg` are separate subvolumes so that rolling back to a');
-            L.push('> snapshot does not also roll back your logs — you want those to');
-            L.push('> explain what went wrong — or throw away the package cache you are');
-            L.push('> about to need.');
-            L.push('');
-        }
-
-        if (s.swap === 'swapfile') {
-            L.push('### Swap file');
-            L.push('');
-            L.push('```bash');
-            if (f.btrfs) {
-                L.push('btrfs subvolume create /mnt/@swap');
-                L.push('mount -o noatime,subvol=@swap ' + f.rootDev + ' /mnt/swap');
-                L.push('btrfs filesystem mkswapfile --size 8G /mnt/swap/swapfile');
-            } else {
-                L.push('mkswap -U clear --size 8G --file /mnt/swapfile');
-            }
-            L.push('```');
-            L.push('');
-            if (f.enc) {
-                L.push('> The swap file lives inside the encrypted volume, so anything paged');
-                L.push('> out of memory — including keys — is encrypted at rest too.');
-                L.push('');
-            }
-        }
-
-        /* ── 3. Install ── */
-        const base = basePackages(s, f);
-        L.push('## 3. Install the base system');
-        L.push('');
-        if (M && M.family === 'gentoo') {
-            /* Not pacstrap with different words. Gentoo's base system is a
-               signed tarball you verify and unpack yourself, and the chroot is
-               assembled by hand because there is no arch-chroot to do it. */
-            L.push('Gentoo\'s base system is a **stage3 tarball**, not a package');
-            L.push('transaction. You download it, check its signature, and unpack it over');
-            L.push('the filesystem you just made.');
-            L.push('');
-            /* Everything in a ```bash fence is lifted verbatim into the
-               runnable script, so a placeholder has to be valid shell as well
-               as readable. An angle-bracket placeholder is a redirection and
-               makes the whole script unparseable — the fence is not decorative
-               here. A variable that must be filled in, checked before use, is
-               both: it reads as a blank to fill and it fails closed. */
-            L.push('```bash');
-            L.push('cd /mnt/gentoo');
-            L.push('');
-            /* The stage3 answer decides the autobuilds directory, and it has to
-               agree with the profile chosen below. Naming the exact path is the
-               difference between "go and find one" and a command they can run. */
-            const stage3Dir = M.stage3.dirFor(s.gentoo_stage3);
-            L.push('# Pick a mirror:  ' + M.stage3.mirrorList);
-            L.push('# Newest tarball under:');
-            L.push('#   releases/amd64/autobuilds/' + stage3Dir + '/');
-            L.push('STAGE3_URL=""     # paste the full tarball URL here');
-            L.push('');
-            L.push('if [ -z "$STAGE3_URL" ]; then');
-            L.push('    echo "Set STAGE3_URL to the stage3 tarball you chose." >&2');
-            L.push('    exit 1');
-            L.push('fi');
-            L.push('');
-            L.push('wget "$STAGE3_URL"');
-            L.push('wget "$STAGE3_URL.asc"');
-            L.push('');
-            L.push(M.stage3.keyImport);
-            L.push(M.stage3.verify('stage3-*.tar.xz'));
-            L.push('```');
-            L.push('');
-            L.push('> Do not skip the signature. The tarball becomes every binary on the');
-            L.push('> machine, so a substituted one is not a corrupted download — it is a');
-            L.push('> system that belongs to somebody else from first boot.');
-            L.push('');
-            L.push('```bash');
-            L.push(M.stage3.unpack('stage3-*.tar.xz'));
-            L.push('```');
-            L.push('');
-            L.push('> `-p` and `--xattrs-include` keep permissions and extended attributes,');
-            L.push('> and `--numeric-owner` keeps the ids as they were built rather than');
-            L.push('> remapping them to whatever the live environment happens to call');
-            L.push('> them. Unpacking without these produces a system that boots and then');
-            L.push('> fails in ways that look unrelated to the tarball.');
-            L.push('');
-            L.push('### Enter the chroot');
-            L.push('');
-            L.push('```bash');
-            M.chrootPrep.forEach(c => L.push(c));
-            L.push('');
-            L.push(M.chroot);
-            M.chrootAfter.forEach(c => L.push(c));
-            L.push('```');
-            L.push('');
-            L.push('> The `--make-rslave` lines matter: without them, unmounting later in');
-            L.push('> the live environment can propagate into the mounts you are still');
-            L.push('> using.');
-            L.push('');
-            L.push('### Compile options');
-            L.push('');
-            /* Every line here is an answer the reader gave. A question that
-               does not reach make.conf is a control wired to nothing. */
-            const makeopts = M.makeopts[s.gentoo_makeopts] || M.makeopts.nproc;
-            const useLine = M.useSets[s.gentoo_use] !== undefined
-                ? M.useSets[s.gentoo_use] : M.useSets.profile;
-            L.push('```bash');
-            L.push('cat >> /mnt/gentoo/etc/portage/make.conf <<EOF');
-            L.push('COMMON_FLAGS="-O2 -pipe -march=native"');
-            L.push('MAKEOPTS="' + makeopts + '"');
-            if (useLine) L.push(useLine);
-            L.push('EOF');
-            L.push('```');
-            L.push('');
-            if (s.gentoo_makeopts === 'half') {
-                L.push('> Half the cores, because a build job can want around 2 GB of RAM');
-                L.push('> when it links. This is the setting that keeps a laptop usable while');
-                L.push('> it compiles, and keeps a long build away from the OOM killer.');
-                L.push('');
-            } else if (s.gentoo_makeopts === '1') {
-                L.push('> One job at a time. Slowest, and the one that always finishes —');
-                L.push('> the right answer after a build has already died on memory once.');
-                L.push('');
-            }
-            L.push('> `-march=native` builds for the CPU doing the building. Do not use it');
-            L.push('> if this disk will be moved to a different machine, or if you intend');
-            L.push('> to build packages here for another box.');
-            L.push('');
-            if (s.gentoo_use === 'minimal') {
-                L.push('> A deliberately minimal USE set is a decision to make now or not at');
-                L.push('> all: turning one of these back **on** later means rebuilding');
-                L.push('> everything that would have depended on it.');
-                L.push('');
-            }
-            L.push('### Get a package tree, and pick a profile');
-            L.push('');
-            L.push('```bash');
-            L.push('emerge-webrsync');
-            L.push('eselect profile list');
-            L.push('');
-            L.push('# Pick the number matching your stage3 (' +
-                   (s.gentoo_stage3 || 'openrc') + ') and the init system you want,');
-            L.push('# then run:  eselect profile set NUMBER');
-            L.push('```');
-            L.push('');
-            L.push('> The profile sets the default USE flags, the init system and the');
-            L.push('> toolchain defaults. Choosing the systemd profile and then trying to');
-            L.push('> run OpenRC — or the reverse — is the most common way a first Gentoo');
-            L.push('> install goes wrong.');
-            L.push('');
-            const gbase = (typeof window !== 'undefined' && window.osPkgNames)
-                ? window.osPkgNames('gentoo', base) : base;
-            if (gbase.length) {
                 L.push('```bash');
-                L.push(M.install(gbase));
+                L.push('emerge --verbose --oneshot app-portage/mirrorselect');
+                L.push('');
+                L.push('# Interactive: pick from the list, closest first.');
+                L.push('mirrorselect -i -o >> /mnt/gentoo/etc/portage/make.conf');
+                L.push('');
+                L.push('# Or automatic: the ' +
+                       (httpsOnlyG ? 'ten fastest HTTPS mirrors' : 'ten fastest mirrors') + '.');
+                L.push('mirrorselect -s10' + (httpsOnlyG ? ' -H' : '') +
+                       ' -o >> /mnt/gentoo/etc/portage/make.conf');
+                L.push('```');
+                L.push('');
+                L.push('> This writes a `GENTOO_MIRRORS=` line. Check it before you rely on');
+                L.push('> it — `mirrorselect` appends, so running it twice leaves two, and');
+                L.push('> the later one wins in a way that is easy to miss.');
+                L.push('');
+                if (!httpsOnlyG) {
+                    L.push('> You allowed plain HTTP mirrors. Distfiles are verified against the');
+                    L.push('> digests in the tree, so this is not an integrity risk — but anyone');
+                    L.push('> on the path can see which packages you build. HTTPS hides that.');
+                    L.push('');
+                }
+                L.push('The package tree itself is separate from these mirrors and is synced');
+                L.push('in the chroot below, with `emerge-webrsync`.');
+                L.push('');
+            } else {
+                // Mirror selection with reflector. Only on Arch-proper (x86_64):
+                // Arch Linux ARM has a separate mirror system.
+                const httpsOnly = s.mirror_https !== 'no';
+                const country = s.mirror_country && s.mirror_country !== 'auto'
+                    ? s.mirror_country : null;
+                L.push('### Pick fast package mirrors');
+                L.push('');
+                L.push('```bash');
+                L.push('pacman -Sy --noconfirm reflector');
+                const parts = ['reflector'];
+                if (country) parts.push('--country ' + country);
+                parts.push('--age 12');            // synced in the last 12 hours
+                parts.push('--latest 20');         // the 20 most-recently-synced
+                if (httpsOnly) parts.push('--protocol https');
+                parts.push('--sort rate');         // then rank those by download speed
+                parts.push('--save /etc/pacman.d/mirrorlist');
+                // Wrap the reflector line for readability rather than one long line.
+                L.push(parts.join(' \\\n    '));
+                L.push('');
+                L.push('# --sort rate downloads from each candidate to measure real speed,');
+                L.push('# so this takes a minute. --age 12 and --latest 20 keep only mirrors');
+                L.push('# that are both fresh and fast.' +
+                       (httpsOnly ? ' --protocol https keeps it to encrypted mirrors.' : ''));
+                L.push('```');
+                L.push('');
+                if (!httpsOnly) {
+                    L.push('> You allowed HTTP mirrors. Package **contents** are still verified');
+                    L.push('> by pacman\'s signatures, so this is not an integrity risk — but');
+                    L.push('> anyone on the path can see which packages you install. HTTPS');
+                    L.push('> hides that.');
+                    L.push('');
+                }
+            }
+
+            /* ── 2. Partition ── */
+            L.push('## 2. Partition `' + f.disk + '`');
+            L.push('');
+            L.push('```bash');
+            L.push('lsblk                       # identify the disk by size and model. Twice.');
+            L.push('```');
+            L.push('');
+            if (f.dual && f.dualFirst) {
+                L.push('This system is going on **first**, so nothing needs shrinking. Give it a');
+                L.push('fixed size and leave the rest of the disk unpartitioned — the other');
+                L.push('installer will find that free space and claim it.');
+                L.push('');
+                L.push('> Leave the room now. Taking it back later means shrinking a filesystem');
+                L.push('> that is full of your data, which is the work this ordering exists to');
+                L.push('> avoid.');
+                L.push('');
+                L.push('```bash');
+                L.push('gdisk ' + f.disk);
+                L.push('#   n → 1 → +512M → type ef00        # this system\'s own ESP');
+                L.push('#   n → 2 → a size you choose → type 8300');
+                L.push('#   w → write');
+                L.push('#');
+                L.push('# Do NOT give partition 2 the rest of the disk. Whatever is left');
+                L.push('# unpartitioned is what the other system gets.');
+                L.push('```');
+                L.push('');
+            } else if (f.dual) {
+                L.push('You are keeping another operating system, so you are **adding** a');
+                L.push('partition rather than repartitioning. Shrink the existing one from');
+                L.push('that system\'s own tools first — Windows Disk Management, or GParted');
+                L.push('for Linux — then create one Linux partition in the free space.');
+                L.push('');
+                L.push('```bash');
+                L.push('gdisk ' + f.disk);
+                if (f.espShared) {
+                    L.push('#   n → next free number → rest of free space → type 8300');
+                    L.push('#   w → write');
+                    L.push('#');
+                    L.push('# Do NOT touch ' + esc(s.dualboot_esp) + '. That is the existing ESP and it is shared.');
+                    L.push('```');
+                    L.push('');
+                    L.push('> You are sharing the other system\'s EFI partition. It is **mounted,');
+                    L.push('> never formatted** — formatting it deletes that system\'s bootloader.');
+                    if (has(s.security_tools, 'anti-evil-maid')) {
+                        /* The reader picked a tool whose whole job is noticing
+                           changes to this partition, and then chose to share it
+                           with a system that rewrites it unpredictably. Both are
+                           legitimate; the combination needs saying out loud. */
+                        L.push('>');
+                        L.push('> **You also selected anti-evil-maid.** It baselines this partition');
+                        L.push('> and reports changes, and the other system writes here too — so');
+                        L.push('> its updates will read as tampering. Re-baseline with');
+                        L.push('> `anti-evil-maid --setup` after each one, or the alerts stop');
+                        L.push('> meaning anything. A separate EFI partition avoids this entirely.');
+                    }
+                    L.push('');
+                } else {
+                    L.push('#   n → next free number → +512M → type ef00   (this system\'s ESP)');
+                    L.push('#   n → next free number → rest of free space → type 8300');
+                    L.push('#   w → write');
+                    L.push('#');
+                    L.push('# Leave the other system\'s ESP alone. This makes a second one.');
+                    L.push('```');
+                    L.push('');
+                    L.push('> The new partition is formatted with the others below. Check its');
+                    L.push('> path twice before you get there: `mkfs.fat` aimed at the *other*');
+                    L.push('> system\'s ESP destroys its bootloader, which is the exact failure a');
+                    L.push('> second partition exists to avoid.');
+                    L.push('');
+                    L.push('> The UEFI specification allows more than one EFI system partition,');
+                    L.push('> and the firmware boots whichever its boot entry names. You pick');
+                    L.push('> between the two systems in the firmware boot menu. If your firmware');
+                    L.push('> only ever offers the first ESP it finds — a few do — put the');
+                    L.push('> bootloaders on the shared one and keep the kernel and initramfs on');
+                    L.push('> a separate `/boot`, which keeps the measured files out of the other');
+                    L.push('> system\'s reach just as well.');
+                    L.push('');
+                }
+            } else {
+                L.push('```bash');
+                L.push('gdisk ' + f.disk);
+                L.push('#   o → new GPT (destroys the existing table)');
+                L.push('#   n → 1 → +' + (s.bootloader === 'uki' ? '1G' : '512M') + ' → type ef00   (EFI system partition)');
+                L.push('#   n → 2 → rest        → type 8300   (Linux filesystem)');
+                L.push('#   w → write');
+                if (s.bootloader === 'uki') {
+                    L.push('#');
+                    L.push('# 1 GiB rather than 512 MiB: a unified kernel image bundles the kernel');
+                    L.push('# and initramfs into one EFI file, and two of those plus a fallback');
+                    L.push('# does not fit in 512 MiB.');
+                }
+                L.push('```');
+            }
+            L.push('');
+
+            if (f.enc) {
+                L.push('### Encrypt');
+                L.push('');
+                L.push('```bash');
+                if (s.encryption === 'luks2') {
+                    L.push('cryptsetup luksFormat --type luks2 --pbkdf argon2id ' + f.root);
+                } else {
+                    L.push('cryptsetup luksFormat --type luks1 ' + f.root);
+                    L.push('# LUKS1 uses PBKDF2, not Argon2id: a weak passphrase falls far');
+                    L.push('# faster to a GPU. Use a long one.');
+                }
+                L.push('cryptsetup open ' + f.root + ' cryptroot');
+                L.push('```');
+                L.push('');
+                L.push('> The passphrase you set here is the one standing between a stolen');
+                L.push('> machine and every file on it. There is no recovery if you forget it.');
+                L.push('');
+            }
+
+            L.push('### Format and mount');
+            L.push('');
+            L.push('```bash');
+            /* Keyed on whether the partition is *shared*, not on whether this is a
+               dual boot. A second ESP made for this system is ours to format; the
+               other system's never is. */
+            if (!f.espShared) {
+                L.push('mkfs.fat -F32' + (f.dual ? ' -n LINUXESP' : '') + ' ' + f.esp);
+            } else {
+                L.push('# ' + f.esp + ' is the existing ESP. It is NOT formatted.');
+            }
+            if (f.btrfs) {
+                L.push('mkfs.btrfs -f ' + f.rootDev);
+                L.push('');
+                L.push('mount ' + f.rootDev + ' /mnt');
+                L.push('btrfs subvolume create /mnt/@');
+                L.push('btrfs subvolume create /mnt/@home');
+                L.push('btrfs subvolume create /mnt/@log');
+                L.push('btrfs subvolume create /mnt/@pkg');
+                L.push('btrfs subvolume create /mnt/@snapshots');
+                L.push('umount /mnt');
+                L.push('');
+                /* The package cache and the EFI mount point are per-system.
+                   Gentoo keeps binary packages in var/cache/binpkgs and mounts the
+                   ESP at /efi with /boot on the root filesystem; Arch does neither.
+                   A subvolume named after another system's package manager is the
+                   small, embarrassing kind of leak this reads as. */
+                const cache = (M && M.pkgCache) || 'var/cache/pacman/pkg';
+                const espAt = ((M && M.espMount) || '/boot').replace(/^\//, '');
+                L.push('O="noatime,compress=zstd:3,space_cache=v2"');
+                L.push('mount -o $O,subvol=@          ' + f.rootDev + ' /mnt');
+                L.push('mkdir -p /mnt/{home,var/log,' + cache + ',.snapshots,' + espAt + '}');
+                L.push('mount -o $O,subvol=@home      ' + f.rootDev + ' /mnt/home');
+                L.push('mount -o $O,subvol=@log       ' + f.rootDev + ' /mnt/var/log');
+                L.push('mount -o $O,subvol=@pkg       ' + f.rootDev + ' /mnt/' + cache);
+                L.push('mount -o $O,subvol=@snapshots ' + f.rootDev + ' /mnt/.snapshots');
+                L.push('mount ' + f.esp + ' /mnt/' + espAt);
+            } else {
+                L.push('mkfs.' + (s.filesystem === 'xfs' ? 'xfs -f' : 'ext4') + ' ' + f.rootDev);
+                L.push('mount ' + f.rootDev + ' /mnt');
+                L.push('mkdir -p /mnt/boot');
+                L.push('mount ' + f.esp + ' /mnt/boot');
+            }
+            L.push('```');
+            L.push('');
+            if (f.btrfs) {
+                L.push('> `@log` and `@pkg` are separate subvolumes so that rolling back to a');
+                L.push('> snapshot does not also roll back your logs — you want those to');
+                L.push('> explain what went wrong — or throw away the package cache you are');
+                L.push('> about to need.');
+                L.push('');
+            }
+
+            if (s.swap === 'swapfile') {
+                L.push('### Swap file');
+                L.push('');
+                L.push('```bash');
+                if (f.btrfs) {
+                    L.push('btrfs subvolume create /mnt/@swap');
+                    L.push('mount -o noatime,subvol=@swap ' + f.rootDev + ' /mnt/swap');
+                    L.push('btrfs filesystem mkswapfile --size 8G /mnt/swap/swapfile');
+                } else {
+                    L.push('mkswap -U clear --size 8G --file /mnt/swapfile');
+                }
+                L.push('```');
+                L.push('');
+                if (f.enc) {
+                    L.push('> The swap file lives inside the encrypted volume, so anything paged');
+                    L.push('> out of memory — including keys — is encrypted at rest too.');
+                    L.push('');
+                }
+            }
+
+            /* ── 3. Install ── */
+            const base = basePackages(s, f);
+            L.push('## 3. Install the base system');
+            L.push('');
+            if (M && M.family === 'gentoo') {
+                /* Not pacstrap with different words. Gentoo's base system is a
+                   signed tarball you verify and unpack yourself, and the chroot is
+                   assembled by hand because there is no arch-chroot to do it. */
+                L.push('Gentoo\'s base system is a **stage3 tarball**, not a package');
+                L.push('transaction. You download it, check its signature, and unpack it over');
+                L.push('the filesystem you just made.');
+                L.push('');
+                /* Everything in a ```bash fence is lifted verbatim into the
+                   runnable script, so a placeholder has to be valid shell as well
+                   as readable. An angle-bracket placeholder is a redirection and
+                   makes the whole script unparseable — the fence is not decorative
+                   here. A variable that must be filled in, checked before use, is
+                   both: it reads as a blank to fill and it fails closed. */
+                L.push('```bash');
+                L.push('cd /mnt/gentoo');
+                L.push('');
+                /* The stage3 answer decides the autobuilds directory, and it has to
+                   agree with the profile chosen below. Naming the exact path is the
+                   difference between "go and find one" and a command they can run. */
+                const stage3Dir = M.stage3.dirFor(s.gentoo_stage3);
+                L.push('# Pick a mirror:  ' + M.stage3.mirrorList);
+                L.push('# Newest tarball under:');
+                L.push('#   releases/amd64/autobuilds/' + stage3Dir + '/');
+                L.push('STAGE3_URL=""     # paste the full tarball URL here');
+                L.push('');
+                L.push('if [ -z "$STAGE3_URL" ]; then');
+                L.push('    echo "Set STAGE3_URL to the stage3 tarball you chose." >&2');
+                L.push('    exit 1');
+                L.push('fi');
+                L.push('');
+                L.push('wget "$STAGE3_URL"');
+                L.push('wget "$STAGE3_URL.asc"');
+                L.push('');
+                L.push(M.stage3.keyImport);
+                L.push(M.stage3.verify('stage3-*.tar.xz'));
+                L.push('```');
+                L.push('');
+                L.push('> Do not skip the signature. The tarball becomes every binary on the');
+                L.push('> machine, so a substituted one is not a corrupted download — it is a');
+                L.push('> system that belongs to somebody else from first boot.');
+                L.push('');
+                L.push('```bash');
+                L.push(M.stage3.unpack('stage3-*.tar.xz'));
+                L.push('```');
+                L.push('');
+                L.push('> `-p` and `--xattrs-include` keep permissions and extended attributes,');
+                L.push('> and `--numeric-owner` keeps the ids as they were built rather than');
+                L.push('> remapping them to whatever the live environment happens to call');
+                L.push('> them. Unpacking without these produces a system that boots and then');
+                L.push('> fails in ways that look unrelated to the tarball.');
+                L.push('');
+                L.push('### Enter the chroot');
+                L.push('');
+                L.push('```bash');
+                M.chrootPrep.forEach(c => L.push(c));
+                L.push('');
+                L.push(M.chroot);
+                M.chrootAfter.forEach(c => L.push(c));
+                L.push('```');
+                L.push('');
+                L.push('> The `--make-rslave` lines matter: without them, unmounting later in');
+                L.push('> the live environment can propagate into the mounts you are still');
+                L.push('> using.');
+                L.push('');
+                L.push('### Compile options');
+                L.push('');
+                /* Every line here is an answer the reader gave. A question that
+                   does not reach make.conf is a control wired to nothing. */
+                const makeopts = M.makeopts[s.gentoo_makeopts] || M.makeopts.nproc;
+                const useLine = M.useSets[s.gentoo_use] !== undefined
+                    ? M.useSets[s.gentoo_use] : M.useSets.profile;
+                L.push('```bash');
+                L.push('cat >> /mnt/gentoo/etc/portage/make.conf <<EOF');
+                L.push('COMMON_FLAGS="-O2 -pipe -march=native"');
+                L.push('MAKEOPTS="' + makeopts + '"');
+                if (useLine) L.push(useLine);
+                L.push('EOF');
+                L.push('```');
+                L.push('');
+                if (s.gentoo_makeopts === 'half') {
+                    L.push('> Half the cores, because a build job can want around 2 GB of RAM');
+                    L.push('> when it links. This is the setting that keeps a laptop usable while');
+                    L.push('> it compiles, and keeps a long build away from the OOM killer.');
+                    L.push('');
+                } else if (s.gentoo_makeopts === '1') {
+                    L.push('> One job at a time. Slowest, and the one that always finishes —');
+                    L.push('> the right answer after a build has already died on memory once.');
+                    L.push('');
+                }
+                L.push('> `-march=native` builds for the CPU doing the building. Do not use it');
+                L.push('> if this disk will be moved to a different machine, or if you intend');
+                L.push('> to build packages here for another box.');
+                L.push('');
+                if (s.gentoo_use === 'minimal') {
+                    L.push('> A deliberately minimal USE set is a decision to make now or not at');
+                    L.push('> all: turning one of these back **on** later means rebuilding');
+                    L.push('> everything that would have depended on it.');
+                    L.push('');
+                }
+                L.push('### Get a package tree, and pick a profile');
+                L.push('');
+                L.push('```bash');
+                L.push('emerge-webrsync');
+                L.push('eselect profile list');
+                L.push('');
+                L.push('# Pick the number matching your stage3 (' +
+                       (s.gentoo_stage3 || 'openrc') + ') and the init system you want,');
+                L.push('# then run:  eselect profile set NUMBER');
+                L.push('```');
+                L.push('');
+                L.push('> The profile sets the default USE flags, the init system and the');
+                L.push('> toolchain defaults. Choosing the systemd profile and then trying to');
+                L.push('> run OpenRC — or the reverse — is the most common way a first Gentoo');
+                L.push('> install goes wrong.');
+                L.push('');
+                const gbase = (typeof window !== 'undefined' && window.osPkgNames)
+                    ? window.osPkgNames('gentoo', base) : base;
+                if (gbase.length) {
+                    L.push('```bash');
+                    L.push(M.install(gbase));
+                    L.push('```');
+                    L.push('');
+                }
+                /* The kernel answer, emitted. Three genuinely different amounts of
+                   work, and the manual route carries the warning at the point it
+                   matters rather than in a wiki page. */
+                L.push('### The kernel');
+                L.push('');
+                L.push('```bash');
+                L.push(M.install(['sys-kernel/linux-firmware']));
+                if (s.gentoo_kernel === 'manual') {
+                    L.push(M.install(M.kernelPkgs.manual));
+                    L.push('cd /usr/src/linux');
+                    L.push('make menuconfig');
+                    L.push('make -j$(nproc) && make modules_install');
+                    L.push('make install');
+                } else if (s.gentoo_kernel === 'dist') {
+                    L.push(M.install(M.kernelPkgs.dist));
+                } else {
+                    L.push(M.install(M.kernelPkgs.bin));
+                }
+                L.push('```');
+                L.push('');
+                if (s.gentoo_kernel === 'manual') {
+                    L.push('> [!CAUTION]');
+                    L.push('> A configuration missing the driver for your disk controller, your');
+                    L.push('> filesystem, or `dm-crypt` will not boot and will not tell you which');
+                    L.push('> one is absent. Check those three before you leave `menuconfig`.');
+                    L.push('> If this is a first Gentoo install, take `gentoo-kernel-bin` and');
+                    L.push('> come back to this once the machine is up.');
+                    L.push('');
+                }
+                /* Binary packages, as chosen. --getbinpkg is a supported workflow,
+                   so it is offered plainly rather than apologised for. */
+                if (s.gentoo_binpkgs === 'all') {
+                    L.push('> **Binaries preferred wherever published.** Add `--getbinpkg` to the');
+                    L.push('> emerge commands below, or set `FEATURES="getbinpkg"` in make.conf');
+                    L.push('> to make it the default. Fastest route to a working desktop, and it');
+                    L.push('> gives up most of the per-machine optimisation you came here for.');
+                    L.push('');
+                } else if (s.gentoo_binpkgs === 'big') {
+                    L.push('> **Binaries for the big ones only.** Build from source by default and');
+                    L.push('> add `--getbinpkg` for the handful nobody sensibly compiles:');
+                    L.push('> `www-client/firefox`, `app-office/libreoffice`,');
+                    L.push('> `www-client/chromium`, `dev-lang/rust`, `sys-devel/llvm`. Chromium');
+                    L.push('> alone can be the better part of a day on a laptop.');
+                    L.push('');
+                } else if (s.gentoo_binpkgs === 'none') {
+                    L.push('> **Everything from source**, which is the reason to be here. Plan the');
+                    L.push('> first install as an overnight job, and expect a desktop with a');
+                    L.push('> browser to be the long pole by a wide margin.');
+                    L.push('');
+                }
+                const missing = (typeof window !== 'undefined' && window.osPkgUnavailable)
+                    ? window.osPkgUnavailable('gentoo', base) : [];
+                if (missing.length) {
+                    L.push('> Not installed here, because Gentoo has no equivalent package: `' +
+                           missing.join('`, `') + '`. The stage3 tarball already provides the');
+                    L.push('> base system, and zram is configured through Gentoo\'s own init');
+                    L.push('> scripts rather than a generator package.');
+                    L.push('');
+                }
+                L.push('> **fstab is written by hand on Gentoo** — there is no `genfstab`. Use');
+                L.push('> `blkid` to get each UUID and write `/etc/fstab` yourself, then read it');
+                L.push('> back before you trust it.');
+                L.push('');
+            } else {
+                L.push('```bash');
+                L.push('pacstrap -K /mnt \\');
+                L.push('    ' + base.join(' ') + '');
+                L.push('');
+                L.push(M ? M.fstab : 'genfstab -U /mnt >> /mnt/etc/fstab');
+                L.push('cat /mnt/etc/fstab          # read it before you trust it');
+                L.push(M ? M.chroot : 'arch-chroot /mnt');
                 L.push('```');
                 L.push('');
             }
-            /* The kernel answer, emitted. Three genuinely different amounts of
-               work, and the manual route carries the warning at the point it
-               matters rather than in a wiki page. */
-            L.push('### The kernel');
-            L.push('');
-            L.push('```bash');
-            L.push(M.install(['sys-kernel/linux-firmware']));
-            if (s.gentoo_kernel === 'manual') {
-                L.push(M.install(M.kernelPkgs.manual));
-                L.push('cd /usr/src/linux');
-                L.push('make menuconfig');
-                L.push('make -j$(nproc) && make modules_install');
-                L.push('make install');
-            } else if (s.gentoo_kernel === 'dist') {
-                L.push(M.install(M.kernelPkgs.dist));
-            } else {
-                L.push(M.install(M.kernelPkgs.bin));
-            }
-            L.push('```');
-            L.push('');
-            if (s.gentoo_kernel === 'manual') {
-                L.push('> [!CAUTION]');
-                L.push('> A configuration missing the driver for your disk controller, your');
-                L.push('> filesystem, or `dm-crypt` will not boot and will not tell you which');
-                L.push('> one is absent. Check those three before you leave `menuconfig`.');
-                L.push('> If this is a first Gentoo install, take `gentoo-kernel-bin` and');
-                L.push('> come back to this once the machine is up.');
+            if (f.libre) {
+                L.push('> **Libre policy is on**, so no microcode is installed. That leaves');
+                L.push('> known CPU errata unmitigated, including some speculative-execution');
+                L.push('> issues. That is the trade you asked for; it is worth knowing you');
+                L.push('> made it.');
                 L.push('');
             }
-            /* Binary packages, as chosen. --getbinpkg is a supported workflow,
-               so it is offered plainly rather than apologised for. */
-            if (s.gentoo_binpkgs === 'all') {
-                L.push('> **Binaries preferred wherever published.** Add `--getbinpkg` to the');
-                L.push('> emerge commands below, or set `FEATURES="getbinpkg"` in make.conf');
-                L.push('> to make it the default. Fastest route to a working desktop, and it');
-                L.push('> gives up most of the per-machine optimisation you came here for.');
-                L.push('');
-            } else if (s.gentoo_binpkgs === 'big') {
-                L.push('> **Binaries for the big ones only.** Build from source by default and');
-                L.push('> add `--getbinpkg` for the handful nobody sensibly compiles:');
-                L.push('> `www-client/firefox`, `app-office/libreoffice`,');
-                L.push('> `www-client/chromium`, `dev-lang/rust`, `sys-devel/llvm`. Chromium');
-                L.push('> alone can be the better part of a day on a laptop.');
-                L.push('');
-            } else if (s.gentoo_binpkgs === 'none') {
-                L.push('> **Everything from source**, which is the reason to be here. Plan the');
-                L.push('> first install as an overnight job, and expect a desktop with a');
-                L.push('> browser to be the long pole by a wide margin.');
-                L.push('');
-            }
-            const missing = (typeof window !== 'undefined' && window.osPkgUnavailable)
-                ? window.osPkgUnavailable('gentoo', base) : [];
-            if (missing.length) {
-                L.push('> Not installed here, because Gentoo has no equivalent package: `' +
-                       missing.join('`, `') + '`. The stage3 tarball already provides the');
-                L.push('> base system, and zram is configured through Gentoo\'s own init');
-                L.push('> scripts rather than a generator package.');
-                L.push('');
-            }
-            L.push('> **fstab is written by hand on Gentoo** — there is no `genfstab`. Use');
-            L.push('> `blkid` to get each UUID and write `/etc/fstab` yourself, then read it');
-            L.push('> back before you trust it.');
-            L.push('');
-        } else {
-            L.push('```bash');
-            L.push('pacstrap -K /mnt \\');
-            L.push('    ' + base.join(' ') + '');
-            L.push('');
-            L.push(M ? M.fstab : 'genfstab -U /mnt >> /mnt/etc/fstab');
-            L.push('cat /mnt/etc/fstab          # read it before you trust it');
-            L.push(M ? M.chroot : 'arch-chroot /mnt');
-            L.push('```');
-            L.push('');
-        }
-        if (f.libre) {
-            L.push('> **Libre policy is on**, so no microcode is installed. That leaves');
-            L.push('> known CPU errata unmitigated, including some speculative-execution');
-            L.push('> issues. That is the trade you asked for; it is worth knowing you');
-            L.push('> made it.');
-            L.push('');
+
         }
 
         /* ── 4. Configure ── */
+        const shellPath = s.shell === 'zsh' ? '/bin/zsh'
+                        : s.shell === 'fish' ? '/usr/bin/fish' : '/bin/bash';
+        if (M && M.imaged) {
+            /* Most of this was answered before the card booted, so the section
+               is about checking it took rather than doing it again. Debian's
+               spellings differ too: the admin group is `sudo`, not `wheel`,
+               and the console keymap lives in /etc/default/keyboard rather
+               than /etc/vconsole.conf. */
+            L.push('## 4. Check what the first boot set');
+            L.push('');
+            L.push('The imaging tool already answered most of this. Confirm it rather than');
+            L.push('setting it twice — and if you skipped the advanced options, this is');
+            L.push('where you catch up.');
+            L.push('');
+            L.push('```bash');
+            L.push('hostnamectl                                # hostname, should be ' + esc(s.hostname));
+            L.push('timedatectl                                # time zone, should be ' + esc(s.timezone));
+            L.push('localectl                                  # locale and keymap');
+            L.push('id ' + esc(s.username) + '                 # groups, should include sudo');
+            L.push('```');
+            L.push('');
+            L.push('Anything that is wrong, set here:');
+            L.push('');
+            L.push('```bash');
+            L.push('sudo hostnamectl set-hostname ' + esc(s.hostname));
+            L.push('sudo timedatectl set-timezone ' + esc(s.timezone));
+            L.push('sudo localectl set-locale LANG=' + esc(s.locale));
+            L.push('sudo localectl set-keymap ' + esc(s.keymap));
+            L.push('');
+            L.push('# /etc/hosts follows the hostname; hostnamectl does not rewrite it.');
+            L.push('grep -q "' + esc(s.hostname) + '" /etc/hosts \\');
+            L.push('  || echo "127.0.1.1   ' + esc(s.hostname) + '" | sudo tee -a /etc/hosts');
+            L.push('```');
+            L.push('');
+            if (s.shell && s.shell !== 'bash') {
+                L.push('```bash');
+                L.push('# The shell you chose. It is installed with the rest below, so run');
+                L.push('# this after that step rather than before it.');
+                L.push('chsh -s ' + shellPath + ' ' + esc(s.username));
+                L.push('```');
+                L.push('');
+            }
+            L.push('> **Debian calls the admin group `sudo`, not `wheel`.** Adding yourself');
+            L.push('> to `wheel` on this system creates a group nothing consults, and the');
+            L.push('> account still cannot use sudo. The user the imager made is already in');
+            L.push('> the right one.');
+            L.push('');
+            L.push('> **root has no password here, and that is on purpose.** Nothing is');
+            L.push('> broken: you become root through `sudo`, and an account with no');
+            L.push('> password cannot be logged into over the network. Setting one gives an');
+            L.push('> attacker something to guess. Leave it.');
+            L.push('');
+        } else {
         L.push('## 4. Configure, inside the chroot');
         L.push('');
         L.push('```bash');
@@ -859,11 +1079,12 @@
         L.push('EOF');
         L.push('');
         L.push('passwd                                     # root password');
-        L.push('useradd -m -G wheel -s ' + (s.shell === 'zsh' ? '/bin/zsh' : s.shell === 'fish' ? '/usr/bin/fish' : '/bin/bash') + ' ' + esc(s.username));
+        L.push('useradd -m -G wheel -s ' + shellPath + ' ' + esc(s.username));
         L.push('passwd ' + esc(s.username));
         L.push('EDITOR=vim visudo                          # uncomment %wheel ALL=(ALL:ALL) ALL');
         L.push('```');
         L.push('');
+        }
         if (f.dual && s.dualboot === 'windows') {
             L.push('> **Turn BitLocker back on once the boot menu is settled.** Boot');
             L.push('> Windows, then `manage-bde -protectors -enable C:` and confirm with');
@@ -905,6 +1126,17 @@
             L.push('> does on Arch. That goes in the bootloader configuration below, not');
             L.push('> here. Authority for all of this is ' + os.docsName + ': <' + os.docs + '>.');
             L.push('');
+        } else if (f.enc && M && M.imaged) {
+            /* Section 2 has already said, at length, that this system does not
+               do full-disk encryption and that the steps elsewhere do not
+               transfer. Printing mkinitcpio here would hand it Arch's tool for
+               the job it was just told is not on offer. */
+            L.push('### The encryption you asked for');
+            L.push('');
+            L.push('> Covered in section 2, and the short version is that it is not a');
+            L.push('> setting on this system. There is no initramfs hook to add here,');
+            L.push('> because there is no encrypted volume for one to unlock.');
+            L.push('');
         } else if (f.enc) {
             L.push('### Tell the initramfs about the encryption');
             L.push('');
@@ -929,11 +1161,70 @@
         const rootOpts = (f.enc ? 'rd.luks.name=$UUID=cryptroot root=/dev/mapper/cryptroot ' : 'root=UUID=$UUID ') +
                          (f.btrfs ? 'rootflags=subvol=@ ' : '') + 'rw';
 
-        /* Handing the menu to the system that is already there means installing
-           no bootloader here at all. A second one that does not know about the
-           first is how the other operating system disappears from the menu —
-           the machine still boots, it just always boots the same thing. */
-        if (f.dual && f.dualOwner === 'existing') {
+        /* A board that boots from its own EEPROM has no bootloader to install.
+           Nothing here is UEFI: there is no ESP, no boot manager, no GRUB and
+           no Secure Boot chain to enrol keys into. What there is instead is
+           firmware that can verify what it loads, and that is worth setting up
+           because it runs before anything else on the board does. */
+        if (M && M.eeprom) {
+            const E = M.eeprom;
+            L.push('There is no bootloader to install. The board holds its own in EEPROM,');
+            L.push('and that firmware reads `config.txt` and `cmdline.txt` off');
+            L.push('`' + M.espMount + '` and starts the kernel directly.');
+            L.push('');
+            L.push('```bash');
+            L.push('# What the board is running now.');
+            L.push(E.version);
+            L.push('');
+            L.push('# Update it. This runs before anything you control, so an out-of-date');
+            L.push('# bootloader is the one thing your disk cannot protect you from.');
+            L.push('sudo ' + E.update);
+            L.push('```');
+            L.push('');
+            if (E.verifiedBoot) {
+                L.push('### Verified boot');
+                L.push('');
+                L.push('Pi 4 and Pi 5 firmware can be told to check a signature on the boot');
+                L.push('image before running it, and to refuse anything that does not match.');
+                L.push('');
+                L.push('```bash');
+                L.push('sudo ' + E.config + ' --edit     # SIGNED_BOOT=1, and a public key');
+                L.push('```');
+                L.push('');
+                L.push('> [!CAUTION]');
+                L.push('> Locking the EEPROM and burning the OTP bits that enforce it is');
+                L.push('> **irreversible**. Get it wrong and the board will not boot anything');
+                L.push('> again, including a rescue image. `pi-boot-guard` deliberately');
+                L.push('> refuses to fuse OTP for you and prints the steps instead, so the');
+                L.push('> decision stays yours and stays deliberate.');
+                L.push('');
+                /* The distinction the plan insists on, at the point where a
+                   reader is most likely to assume otherwise. Someone arriving
+                   from the anti-evil-maid pages has just read about boot
+                   measurement, and this is the paragraph that stops them
+                   carrying that expectation onto hardware that cannot meet it. */
+                L.push('> **This is verified boot, not measured boot, and the difference');
+                L.push('> matters here.** Verified means the firmware checks a signature and');
+                L.push('> refuses to run what does not match. Measured means each stage is');
+                L.push('> hashed into a TPM so a key can be sealed to the result and a remote');
+                L.push('> party can be shown it. **The board has no TPM**, so nothing is');
+                L.push('> measured, nothing can be sealed, and no attestation is possible.');
+                L.push('> Anything on this site that seals to boot state is describing');
+                L.push('> different hardware.');
+                L.push('');
+            }
+            L.push('```bash');
+            L.push('# Both files, before you change either.');
+            E.bootFiles.forEach(function (file) {
+                L.push('cp ' + M.espMount + '/' + file + ' ' + M.espMount + '/' + file + '.bak');
+            });
+            L.push('```');
+            L.push('');
+            L.push('> Keep the backups on the FAT partition itself. It is the one filesystem');
+            L.push('> you can still read from any other machine when the board will not');
+            L.push('> start, which is exactly when you will want them.');
+            L.push('');
+        } else if (f.dual && f.dualOwner === 'existing') {
             L.push('You chose to let **' + esc(s.dualboot) + '\'s** bootloader keep the menu,');
             L.push('so none is installed here. This system supplies a kernel and an');
             L.push('initramfs; the other one finds them.');
@@ -1172,17 +1463,30 @@
         L.push('## 7. Reboot');
         L.push('');
         L.push('```bash');
-        L.push('exit');
-        L.push('umount -R /mnt');
-        if (f.enc) L.push('cryptsetup close cryptroot');
-        L.push('reboot');
+        if (M && M.imaged) {
+            // Nothing to leave and nothing to unmount: every command so far ran
+            // on the booted board.
+            L.push('sudo reboot');
+        } else {
+            L.push('exit');
+            L.push('umount -R /mnt');
+            if (f.enc) L.push('cryptsetup close cryptroot');
+            L.push('reboot');
+        }
         L.push('```');
         L.push('');
-        L.push('> If it does not come up, boot the installer again, `cryptsetup open`,');
-        L.push('> remount, ' + (M && M.family === 'gentoo'
-                ? 'redo the bind mounts and `chroot`'
-                : '`arch-chroot`') + ', and you are exactly where you were. Almost');
-        L.push('> nothing at this stage is unrecoverable.');
+        if (M && M.imaged) {
+            L.push('> If it does not come up, the card is readable in any other machine.');
+            L.push('> The FAT partition holds `config.txt` and `cmdline.txt` and the copies');
+            L.push('> you took of them, so a bad edit is undone from a laptop rather than');
+            L.push('> from a board that will not start.');
+        } else {
+            L.push('> If it does not come up, boot the installer again, `cryptsetup open`,');
+            L.push('> remount, ' + (M && M.family === 'gentoo'
+                    ? 'redo the bind mounts and `chroot`'
+                    : '`arch-chroot`') + ', and you are exactly where you were. Almost');
+            L.push('> nothing at this stage is unrecoverable.');
+        }
         L.push('');
 
         /* ── 8. Post-install ── */
@@ -1195,9 +1499,14 @@
             L.push('');
             L.push('```bash');
             const all = dpkgs.concat(post.extra, post.apps);
-            if (M && M.family === 'gentoo') {
+            /* Every system that is not Arch renames some of these, so the
+               translation is keyed on that rather than on one family. An Arch
+               package name reaching apt or portage is a command that runs,
+               fails on its argument, and reads to the reader as this guide
+               being wrong about their system. */
+            if (M && M.family !== 'arch') {
                 const mapped = (typeof window !== 'undefined' && window.osPkgNames)
-                    ? window.osPkgNames('gentoo', all) : all;
+                    ? window.osPkgNames(osKey, all) : all;
                 L.push('sudo ' + M.install(mapped));
             } else {
                 L.push('sudo pacman -S --needed \\');
@@ -1238,57 +1547,53 @@
                 L.push('package databases here, on the machine — a name that has been renamed');
                 L.push('or dropped upstream should stop *you*, not the script.');
                 L.push('');
+                /* The existence check, the install and the search URL all come
+                   from the model. Three systems asked the same question three
+                   different ways here, and a fourth would have meant a fourth
+                   `else if` in a block already hard to read — while the branch
+                   that ran by default handed `pacman -Si` to apt. */
+                const q = M ? M.queryPkg : null;
                 L.push('```bash');
                 L.push('for pkg in ' + typed.join(' ') + '; do');
-                if (M && M.family === 'gentoo') {
-                    /* No AUR here, so no second source to fall back to and no
-                       PKGBUILD warning to give. `emerge --pretend` is the
-                       existence check, and an unqualified name that matches
-                       more than one category makes portage stop and ask rather
-                       than guess — which is a good reason to check first. */
-                    L.push('    if emerge --pretend --quiet "$pkg" >/dev/null 2>&1; then');
+                if (q) {
+                    L.push('    if ' + q.exists + ' >/dev/null 2>&1; then');
                     L.push('        sudo ' + M.install(['"$pkg"']));
+                    if (M.aur) {
+                        L.push('    elif command -v paru >/dev/null 2>&1 && paru -Si "$pkg" >/dev/null 2>&1; then');
+                        L.push('        # AUR: a build script a stranger wrote, running as you.');
+                        L.push('        paru -S --needed "$pkg"');
+                    }
                     L.push('    else');
-                    L.push('        echo "WARNING: \'$pkg\' did not resolve to a package." >&2');
-                    L.push('        echo "  Search: https://packages.gentoo.org/packages/search?q=$pkg" >&2');
-                    L.push('        echo "  A name without its category can match more than one" >&2');
-                    L.push('        echo "  package. Try the full atom, e.g. app-editors/vim." >&2');
-                    L.push('    fi');
-                } else {
-                    L.push('    if pacman -Si "$pkg" >/dev/null 2>&1; then');
-                    L.push('        sudo pacman -S --needed --noconfirm "$pkg"');
-                    L.push('    elif command -v paru >/dev/null 2>&1 && paru -Si "$pkg" >/dev/null 2>&1; then');
-                    L.push('        # AUR: a build script a stranger wrote, running as you.');
-                    L.push('        paru -S --needed "$pkg"');
-                    L.push('    else');
-                    L.push('        echo "WARNING: \'$pkg\' is in neither the official repos nor the AUR." >&2');
-                    L.push('        echo "  Official: https://archlinux.org/packages/?q=$pkg" >&2');
-                    L.push('        echo "  AUR:      https://aur.archlinux.org/packages?K=$pkg" >&2');
-                    L.push('        echo "  It may have been renamed or dropped. Skipping this one." >&2');
+                    L.push('        echo "WARNING: \'$pkg\' ' + q.absent + '" >&2');
+                    q.hints.forEach(function (h) { L.push('        echo "  ' + h + '" >&2'); });
                     L.push('    fi');
                 }
                 L.push('done');
                 L.push('```');
                 L.push('');
-                if (M && M.family === 'gentoo') {
-                    L.push('> That link is the one that would come back empty if the package');
-                    L.push('> really is gone — open it rather than taking the warning\'s word.');
-                    L.push('');
-                    L.push('> [!NOTE]');
-                    L.push('> Packages in the Gentoo tree are reviewed, unlike the AUR — but an');
-                    L.push('> **overlay** is not. If you add one, you are trusting whoever');
-                    L.push('> maintains it exactly as much as you would trust a PKGBUILD.');
-                    L.push('');
-                } else {
-                    L.push('> Those two links are the ones that would 404 if the package really is');
-                    L.push('> gone — open them and see for yourself rather than taking the');
-                    L.push('> warning\'s word for it.');
-                    L.push('');
+                L.push('> Those links are the ones that would come back empty if the package');
+                L.push('> really is gone — open them rather than taking the warning\'s word.');
+                L.push('');
+                if (M && M.aur) {
                     L.push('> [!NOTE]');
                     L.push('> AUR packages are not reviewed by anyone. `makepkg` runs a `PKGBUILD`');
                     L.push('> a stranger wrote, as your user, before anything is installed. Read');
                     L.push('> it — `paru -G <pkg>` fetches it without building — or run it past');
                     L.push('> `aur-guard`, which is in the security tools list for this reason.');
+                    L.push('');
+                } else if (M && M.family === 'gentoo') {
+                    L.push('> [!NOTE]');
+                    L.push('> Packages in the Gentoo tree are reviewed, unlike the AUR — but an');
+                    L.push('> **overlay** is not. If you add one, you are trusting whoever');
+                    L.push('> maintains it exactly as much as you would trust a PKGBUILD.');
+                    L.push('');
+                } else if (M && M.family === 'debian') {
+                    L.push('> [!NOTE]');
+                    L.push('> Everything in the Debian and Raspberry Pi archives is signed and');
+                    L.push('> maintained. A third-party apt repository is not: adding one gives');
+                    L.push('> its owner the ability to replace any package on the system at the');
+                    L.push('> next upgrade, silently. That is a larger trust than the AUR asks');
+                    L.push('> for, not a smaller one.');
                     L.push('');
                 }
             }
@@ -1469,6 +1774,10 @@
                 L.push('> transactions automatically. The timer above still gives you');
                 L.push('> scheduled snapshots; a pre-update one is a `portage` hook you write');
                 L.push('> yourself, and worth it before a large `@world` rebuild.');
+            } else if (M && M.family === 'debian') {
+                L.push('> Debian has no `snap-pac`, so nothing ties a snapshot to a package');
+                L.push('> transaction on its own. `snapper` ships an apt hook — enable it and');
+                L.push('> a broken upgrade becomes a rollback rather than a reimaged card.');
             } else {
                 L.push('> With `snap-pac` installed, a snapshot is taken before and after every');
                 L.push('> pacman transaction. A broken update becomes a reboot rather than a');

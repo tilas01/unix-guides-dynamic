@@ -553,7 +553,21 @@
             },
             chroot: 'arch-chroot /mnt',
             fstab: 'genfstab -U /mnt >> /mnt/etc/fstab',
-            initramfs: 'mkinitcpio -P'
+            initramfs: 'mkinitcpio -P',
+
+            /* How to ask whether a package the reader typed exists, and what to
+               tell them when it does not. Held here because all three systems
+               answer it differently and the emitters used to branch: the
+               default arm handed pacman's syntax to whatever was not Gentoo. */
+            queryPkg: {
+                exists: 'pacman -Si "$pkg"',
+                absent: 'is in neither the official repos nor the AUR.',
+                hints: [
+                    'Official: https://archlinux.org/packages/?q=$pkg',
+                    'AUR:      https://aur.archlinux.org/packages?K=$pkg',
+                    'It may have been renamed or dropped. Skipping this one.'
+                ]
+            }
         },
 
         gentoo: {
@@ -601,6 +615,18 @@
                 'mount --bind /run /mnt/gentoo/run',
                 'mount --make-slave /mnt/gentoo/run'
             ],
+            /* An unqualified name that matches more than one category makes
+               portage stop and ask rather than guess, which is a good reason to
+               check before installing rather than after. */
+            queryPkg: {
+                exists: 'emerge --pretend --quiet "$pkg"',
+                absent: 'did not resolve to a package.',
+                hints: [
+                    'Search: https://packages.gentoo.org/packages/search?q=$pkg',
+                    'A name without its category can match more than one',
+                    'package. Try the full atom, e.g. app-editors/vim.'
+                ]
+            },
             chroot: 'chroot /mnt/gentoo /bin/bash',
             chrootAfter: [
                 'source /etc/profile',
@@ -682,6 +708,113 @@
                 ],
                 cryptModules: 'add_dracutmodules+=" crypt dm rootfs-block "'
             }
+        },
+
+        raspios: {
+            family: 'debian',
+            authority: 'https://www.raspberrypi.com/documentation/',
+
+            /* ── Nothing is installed. An image is written to a card ─────────
+               This is the difference that shapes everything else. Arch and
+               Gentoo both bootstrap a system onto a filesystem you prepared;
+               Raspberry Pi OS ships that filesystem already made. There is no
+               live environment, no partitioning, no chroot and no base
+               package set — the card is imaged, the board is booted, and the
+               first thing that runs is the installed system.
+
+               `imaged` is what the emitters branch on. It is a statement about
+               the shape of the install rather than about the package manager,
+               because a second Debian on ordinary hardware would share every
+               apt command below and none of this. */
+            imaged: {
+                tool: 'Raspberry Pi Imager',
+                toolUrl: 'https://www.raspberrypi.com/software/',
+                imagesUrl: 'https://www.raspberrypi.com/software/operating-systems/',
+                /* The Imager writes these before first boot. They are the
+                   supported way to configure a headless Pi, and they are why
+                   this guide has no chroot section: the work a chroot does
+                   elsewhere is done here, by files on the boot partition. */
+                firstBoot: {
+                    userconf: 'userconf.txt',
+                    ssh: 'ssh',
+                    wifi: 'wpa_supplicant.conf'
+                },
+                expand: 'raspi-config --expand-rootfs',
+                configure: 'raspi-config'
+            },
+
+            /* The FAT partition, and it is NOT an EFI system partition. The
+               board's own bootloader reads config.txt and cmdline.txt from it.
+               Named `espMount` to match the field the emitters already read,
+               with the distinction spelled out wherever it is printed. */
+            espMount: '/boot/firmware',
+            pkgCache: 'var/cache/apt/archives',
+            init: { fixed: 'systemd' },
+            kernel: { model: 'binary', compiled: false },
+            aur: false,
+
+            sync: 'apt-get update',
+            /* --no-install-recommends is the default here for the same reason
+               --needed is on the Arch side: it installs what was asked for.
+               Debian's recommends pull in a desktop's worth of extras on a
+               board with 512 MB of RAM and an SD card. */
+            install: function (pkgs) {
+                return 'apt-get install -y --no-install-recommends ' + pkgs.join(' ');
+            },
+            installPlain: function (pkgs) {
+                return 'apt-get install -y ' + pkgs.join(' ');
+            },
+            upgrade: 'apt-get update && apt-get full-upgrade -y',
+            /* dpkg rather than apt, because apt refuses to break a dependency
+               and this is the one place that is the intent — the doas wrapper
+               keeps everything that depended on sudo working. */
+            removeNoDeps: function (pkgs) {
+                return 'dpkg --remove --force-depends ' + pkgs.join(' ');
+            },
+            /* No chroot in the ordinary flow: the first shell you get is on
+               the booted board. Customising the image offline needs
+               qemu-user-static and is a different job from installing. */
+            chroot: null,
+            /* apt-cache reads the lists already on disk, so this asks the same
+               question offline that the others ask of their own databases. */
+            queryPkg: {
+                exists: 'apt-cache show "$pkg" 2>/dev/null | grep -q .',
+                absent: 'is in neither the Debian nor the Raspberry Pi archive.',
+                hints: [
+                    'Debian:       https://packages.debian.org/search?keywords=$pkg',
+                    'Raspberry Pi: https://archive.raspberrypi.com/debian/',
+                    'Run apt-get update first if the lists are stale.'
+                ]
+            },
+            // The image ships its own, with the PARTUUIDs already correct.
+            fstab: null,
+            initramfs: 'update-initramfs -u -k all',
+
+            /* ── Boot, which is not UEFI and must never be called measured ───
+               The Pi 4 and 5 hold their bootloader in EEPROM and can verify a
+               signed boot image before running it. That is verified boot, and
+               it is real. It is not measured boot: nothing extends a PCR
+               because the board has no TPM, so there is nothing for a remote
+               party to attest and nothing for a key to be sealed against.
+               Calling it measured would promise a property the hardware does
+               not have, which on a page about anti-evil-maid attacks is the
+               worst place to be loose with a word. */
+            eeprom: {
+                update: 'rpi-eeprom-update -a',
+                version: 'vcgencmd bootloader_version',
+                config: 'rpi-eeprom-config',
+                bootFiles: ['config.txt', 'cmdline.txt'],
+                verifiedBoot: true,
+                measuredBoot: false
+            },
+
+            /* Full-disk encryption is not what this system does. The image
+               boots unencrypted, and there is no installer option for it. It
+               can be done — initramfs, cryptsetup, and moving the root — but
+               it is a rebuild rather than a setting, so the guide describes it
+               as the separate job it is instead of implying the Arch steps
+               transfer. */
+            fde: { standard: false, mechanism: 'cryptsetup + initramfs-tools' }
         }
     };
 

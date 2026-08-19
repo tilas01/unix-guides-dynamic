@@ -1221,6 +1221,12 @@ const selectedPostApps = Array.from(document.querySelectorAll('input[name="post_
     const modelKey = hasModel ? osKey : 'arch';
     const M = window.osInstallModel ? window.osInstallModel(modelKey) : null;
     const isGentoo = !!(M && M.family === 'gentoo');
+    /* A system that ships a filesystem image has no installer to script: there
+       is nothing to partition, nothing to bootstrap and no chroot to enter.
+       Keyed on the shape of the install rather than on the package manager,
+       because a second Debian on ordinary hardware would share every apt
+       command here and none of this. */
+    const isImaged = !!(M && M.imaged);
 
     /* Gentoo's stage3 answer decides its init, which is why there is no
        separate profile question: one answer settles the tarball, the profile
@@ -1444,7 +1450,13 @@ run_with_progress() {
                CD already carries terminus, and reaching for a package manager
                inside somebody else's live environment is how a guide starts
                issuing commands that do not exist there. */
-            if (isGentoo) {
+            if (isGentoo || isImaged) {
+                /* Neither reaches for a package manager here. Gentoo's admin CD
+                   already carries terminus, and an imaged system is not in a
+                   live environment at all — it is the installed system, where
+                   pulling a console font in before the first upgrade is work
+                   for no gain. `|| true` because a board on a serial console
+                   has no font to set and that is not a failure. */
                 o += `setfont ter-v24b 2>/dev/null || true\n\n`;
             } else {
                 o += `pacman -Sy --noconfirm terminus-font\nsetfont ter-v24b\n\n`;
@@ -1695,6 +1707,17 @@ run_with_progress() {
             o += `\n# The chroot, assembled by hand\n`;
             M.chrootPrep.forEach(c => { o += `${c}\n`; });
             o += `cp --dereference /etc/resolv.conf /mnt/gentoo/etc/\n`;
+        } else if (isImaged) {
+            /* The image is the base system. Nothing is installed here, so what
+               would have been the bootstrap step is the two things that do have
+               to happen on a freshly written card: grow the root filesystem to
+               the card it was actually written to, and take everything
+               published since the image was built. */
+            if (cmdOnly) o += `echo -e "\\n\${COLOR_BLUE}:: Step 2: First boot\${COLOR_RESET}\\n\${COLOR_FG}The image already holds the base system. Expanding the root filesystem to fill the card, then upgrading.\\nDocs: ${M.authority}\${COLOR_RESET}"\n`;
+            o += `# The image is sized for the smallest supported card, so the root\n`;
+            o += `# filesystem does not fill the one you actually used.\n`;
+            o += `${M.imaged.expand}\n`;
+            o += `${M.upgrade}\n`;
         } else {
             if (cmdOnly) o += `echo -e "\\n\${COLOR_BLUE}:: Step 2: Base System Installation (pacstrap)\${COLOR_RESET}\\n\${COLOR_FG}Downloading and installing the base OS, kernel (${kernelMain}), drivers, and essential tools.\\nWiki: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages\${COLOR_RESET}"\n`;
             if (verbosity_level === 'progress') {
@@ -1725,6 +1748,22 @@ run_with_progress() {
               o += `# There is no equivalent of archiso's bootmnt to check from inside a\n`;
               o += `# running Gentoo medium, which is why this is a step you take earlier\n`;
               o += `# rather than a command here.\n`;
+          } else if (isoVerify === 'yes' && isImaged) {
+              /* There is no live medium to check from the inside. The image was
+                 written to a card from another machine, and by the time any of
+                 this runs the board has already booted from it — so the only
+                 verification that means anything happened before the write, not
+                 now. Saying that is more use than a check that cannot fail. */
+              o += `\n# ==========================================\n`;
+              o += `# Image integrity — ${osLabel}\n`;
+              o += `# ==========================================\n`;
+              o += `# Nothing to verify from here: this is the installed system, not a\n`;
+              o += `# live medium, and the image it came from is no longer on the card in\n`;
+              o += `# the form that was published. Verification is a step you take before\n`;
+              o += `# writing the card:\n`;
+              o += `#   sha256sum -c <image>.img.xz.sha256\n`;
+              o += `# The imaging tool also verifies the write itself; leave that on.\n`;
+              o += `# Docs: ${M.authority}\n`;
           } else if (isoVerify === 'yes') {
               o += `\n# ==========================================\n`;
               o += `# Live ISO Integrity Verifier (Ventoy/Rufus)\n`;
@@ -1954,6 +1993,21 @@ run_with_progress() {
                 o += `# modules makes it independent of that; the failure it prevents is an\n`;
                 o += `# initramfs that cannot open the root volume, which you find out\n`;
                 o += `# about at the first reboot and not before.\n`;
+            }
+        } else if (isImaged) {
+            /* No mkinitcpio and nothing to rebuild. The image ships an
+               initramfs the board already boots, and full-disk encryption -
+               the only reason this section adds hooks - is not something this
+               system does. The guide says that at length in its own section
+               rather than quietly emitting Arch's tool for it here. */
+            o += `# The image ships its own initramfs and the board already boots it.\n`;
+            o += `# There is no mkinitcpio here, and no encrypted volume for a hook to\n`;
+            o += `# unlock: ${osLabel} does not offer full-disk encryption at install\n`;
+            o += `# time. Adding it afterwards is ${M.fde.mechanism}, and it is a rebuild\n`;
+            o += `# of the system rather than a setting. Docs: ${M.authority}\n`;
+            if (M.initramfs) {
+                o += `# If you do change what the initramfs holds, this rebuilds it:\n`;
+                o += `#   ${M.initramfs}\n`;
             }
         } else {
             let baseHooks = initSys === "systemd" ? "base systemd autodetect microcode modconf kms keyboard sd-vconsole block" : "base udev autodetect microcode modconf kms keyboard keymap consolefont block";
