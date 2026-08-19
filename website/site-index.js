@@ -180,7 +180,26 @@
        reasonable thing to be. `sortWrap` was already guarded; the other three
        were not, so the first keystroke on any page lacking `#site-contents`
        threw and the search silently did nothing at all. */
-    function render(results, words) {
+    /** A line offering the results the current scope is holding back. */
+    function hiddenNotice(hidden) {
+        var os = scopeOs();
+        var label = (os && window.OS_META && window.OS_META[os])
+            ? window.OS_META[os].label : 'the selected system';
+        var p = document.createElement('p');
+        p.className = 'search-scope-note';
+        p.appendChild(document.createTextNode(
+            hidden + ' result' + (hidden === 1 ? '' : 's') + ' hidden as ' +
+            'belonging to another system, because you are installing ' + label + '. '));
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'link-button';
+        b.textContent = 'Search everything instead';
+        b.addEventListener('click', function () { window.__searchShowEverything(); });
+        p.appendChild(b);
+        return p;
+    }
+
+    function render(results, words, hidden) {
         var host = el('search-results');
         if (!host) return;
         var contents = el('site-contents');
@@ -192,8 +211,17 @@
         lastWords = words;
 
         if (!results.length) {
-            if (contents) contents.hidden = false;
-            host.hidden = true;
+            /* Nothing matched *in scope*. If the scope is why, say so and offer
+               the way out — otherwise a reader searching for something that
+               exists on the site is told, wrongly, that it does not. */
+            if (hidden) {
+                host.hidden = false;
+                host.appendChild(hiddenNotice(hidden));
+                if (contents) contents.hidden = true;
+            } else {
+                if (contents) contents.hidden = false;
+                host.hidden = true;
+            }
             if (count) count.textContent = '';
             if (sortWrap) sortWrap.hidden = true;
             return;
@@ -202,6 +230,10 @@
         host.hidden = false;
         if (sortWrap) sortWrap.hidden = false;
         if (count) count.textContent = results.length + (results.length === 1 ? ' result' : ' results');
+
+        // Above the results, so the narrowing is visible before they are read
+        // rather than discovered after scrolling past everything it kept.
+        if (hidden) host.appendChild(hiddenNotice(hidden));
 
         var ordered = applySort(results);
         ordered.forEach(function (r, i) {
@@ -238,18 +270,80 @@
         });
     }
 
+    /* ── Scope ───────────────────────────────────────────────────────────────
+       Once a system has been chosen, material belonging to a different one is
+       not an answer to the question being asked: somebody installing Gentoo
+       does not want the pacman cheatsheet, and offering it is how a reader ends
+       up running the wrong command with the right intention.
+
+       Only entries the index could positively attribute to a system carry `o`.
+       Everything else is shared and always shown, which is most of the site —
+       partitioning, dual boot, the security tools, the hardware sections. The
+       filter therefore removes what belongs to somebody else rather than
+       keeping only what belongs to you, and those are different rules: the
+       second one would hide the whole shared body of the site.
+
+       `showAll` is the escape hatch, offered whenever anything was hidden, so
+       the narrowing is never silent and never a dead end. */
+    var showAll = false;
+
+    function scopeOs() {
+        if (showAll) return null;
+        return (typeof window.chosenOS === 'function') ? window.chosenOS() : null;
+    }
+
+    function inScope(entry, os) {
+        return !os || !entry.o || entry.o === os;
+    }
+
     function search(raw) {
         var q = normalise(raw);
-        if (q.length < 2) { render([], []); return; }
+        if (q.length < 2) { render([], [], 0); return; }
         var words = q.split(' ').filter(Boolean);
+        var os = scopeOs();
         var scored = [];
+        var hidden = 0;
         for (var i = 0; i < entries.length; i++) {
             var n = score(entries[i], q, words);
-            if (n > 0) scored.push({ e: entries[i], n: n });
+            if (n <= 0) continue;
+            if (!inScope(entries[i], os)) { hidden++; continue; }
+            scored.push({ e: entries[i], n: n });
         }
         scored.sort(function (a, b) { return b.n - a.n; });
-        render(scored.slice(0, 60).map(function (x) { return x.e; }), words);
+        render(scored.slice(0, 60).map(function (x) { return x.e; }), words, hidden);
     }
+
+    /* Re-run when the reader changes system, so the results on screen are for
+       the system now selected rather than the one that was. */
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('unix:os-changed', function () {
+            showAll = false;
+            var box = el('site-search');
+            if (box && box.value) search(box.value);
+            describeScope();
+        });
+    }
+
+    /** Say what is being searched, in the status line under the box. */
+    function describeScope() {
+        var status = el('search-status');
+        if (!status || !loaded) return;
+        var os = scopeOs();
+        var label = (os && window.OS_META && window.OS_META[os])
+            ? window.OS_META[os].label : null;
+        status.textContent = label
+            ? 'Searching ' + entries.length + ' entries, scoped to ' + label + '.'
+            : 'Searching ' + entries.length +
+              ' pages, sections, questions and documents.';
+    }
+
+    /** Offered by render() when the scope hid something. */
+    window.__searchShowEverything = function () {
+        showAll = true;
+        var box = el('site-search');
+        if (box) search(box.value);
+        describeScope();
+    };
 
     function wire() {
         var box = el('site-search');
@@ -334,11 +428,7 @@
             .then(function (data) {
                 entries = Array.isArray(data) ? data : [];
                 loaded = true;
-                var status = el('search-status');
-                if (status) {
-                    status.textContent = 'Searching ' + entries.length +
-                        ' pages, sections, questions and documents.';
-                }
+                describeScope();
                 var box = el('site-search');
                 if (box) {
                     box.disabled = false;

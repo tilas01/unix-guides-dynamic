@@ -238,6 +238,39 @@ def index_docs(web: str) -> list[dict]:
     return out
 
 
+# Which system an entry belongs to, when that can be told from where it lives.
+#
+# Deliberately conservative. An entry is tagged only when its path or its title
+# names a system outright; everything else stays untagged and is shown whatever
+# is selected. The failure to avoid is hiding a page from the reader who needed
+# it, and most of this site is shared between systems — partitioning, dual
+# boot, the security tools, the wiki's hardware sections. Guessing that the
+# numbered install tree is "Arch only" would hide the only partitioning
+# reference the project has from four systems out of five.
+#
+# Keys are the ids in website/os-meta.js. tests/search-scope.mjs checks they
+# still are.
+OS_MARKERS = (
+    ("gentoo", ("/gentoo/", "gentoo-commands", "gentoo/")),
+    # Not "raspberry": examples/09-arm-raspberry-pi.md is Arch Linux ARM on Pi
+    # hardware, which is a different system from Raspberry Pi OS and would be
+    # hidden from the Arch reader it was written for.
+    ("raspios", ("/raspios/", "raspios-commands", "raspios/")),
+    ("freebsd", ("/freebsd/", "freebsd-commands", "freebsd/")),
+    ("openbsd", ("/openbsd/", "openbsd-commands", "openbsd/")),
+    ("arch", ("arch-commands", "/arch/")),
+)
+
+
+def tag_os(entry: dict) -> str | None:
+    """The system an entry is specific to, or None when it is shared."""
+    hay = (entry.get("u", "") + " " + entry.get("t", "")).lower()
+    for os_id, markers in OS_MARKERS:
+        if any(m in hay for m in markers):
+            return os_id
+    return None
+
+
 def main() -> int:
     # Section names contain emoji, and a Windows console defaults to cp1252,
     # which cannot encode them — the summary at the end would crash the script
@@ -259,6 +292,13 @@ def main() -> int:
             continue
         seen.add(e["u"])
         unique.append(e)
+
+    # `o` only where it could be determined, so the common case costs no bytes
+    # and an untagged entry is unambiguously "shared" rather than "unknown".
+    for e in unique:
+        os_id = tag_os(e)
+        if os_id:
+            e["o"] = os_id
 
     unique.sort(key=lambda e: (e["s"], e["t"]))
 

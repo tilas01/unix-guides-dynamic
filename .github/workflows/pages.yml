@@ -246,6 +246,14 @@ jobs:
         run: npm run pkgnames
         working-directory: tests
 
+      # The search may narrow to the selected system and must never lose a
+      # shared entry doing it. The rule is subtractive - hide what belongs to
+      # another system - because keeping only what matches would hide the whole
+      # shared body of the site from every reader who picked anything.
+      - name: "Test: scoping the search hides nothing shared"
+        run: npm run searchscope
+        working-directory: tests
+
       # Retired names must stay retired. anti-ducky's rename half-reverted once
       # and left a journalctl line naming a unit that never existed.
       - name: "Test: naming parity"
