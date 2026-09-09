@@ -98,7 +98,13 @@ icon("arch-guides", "ARCH INSTALL GUIDES", "DYNAMIC INSTALL GENERATOR", "m", """
 # the "g" swirl — Larry the cow is the mascot, but the swirl is the mark.
 
 # Tux, for the neutral *nix banner shown before an OS is chosen.
-icon("unix-guides", "*NIX INSTALL GUIDES", "EVERY *NIX GUIDE YOU COULD EVER NEED", "m", """
+#
+# The wordmark carries the acronym and the subtitle expands it, because "SIT"
+# on its own is a name nobody can guess the meaning of. The repository is
+# `Unix-SIT` rather than `*nix-SIT` only because GitHub repository names are
+# ASCII, and `*` is not in the set it accepts — the banner is under no such
+# constraint, so it says the real name.
+icon("unix-guides", "*NIX-SIT", "SECURE INSTALLATION TUTORIALS", "m", """
 ................
 ......KKKK......
 .....KKKKKK.....

@@ -4,17 +4,23 @@
   <img src="img/banners/unix-guides.png" width="100%" alt="*nix Install Guides banner">
 </p>
 
-<h1 align="center">🐧 Unix-SIT — *nix Install Guides</h1>
+<h1 align="center">🐧 *nix-SIT — Secure Installation Tutorials</h1>
 
 <p align="center">
-  <strong>A modular, dynamically generated, security-focused *nix-like installation system.</strong>
+  <strong>A modular, dynamically generated, security-focused *nix installation system.</strong>
 </p>
 
 <p align="center">
-  <em><strong>S.I.T</strong> is <strong>Smart Installation Tool</strong>, so the name reads
-  either "Unix SIT" or, in full, "Unix Smart Installation Tool".<br>
-  <em>*nix Install Guides</em> is what the site calls itself; <em>Unix-SIT</em> is
-  the project and the repository.</em>
+  <em><strong>S.I.T</strong> is <strong>Secure Installation Tutorial</strong>, so the name
+  reads <em>*nix Secure Installation Tutorials</em>, or <em>*nix-SIT</em> for short.</em>
+</p>
+
+<p align="center">
+  <sub><strong>Why the repository is called <code>Unix-SIT</code> and not
+  <code>*nix-SIT</code>:</strong> GitHub repository names accept a narrow set of ASCII
+  characters and <code>*</code> is not one of them. The project is <em>*nix-SIT</em>
+  everywhere it can be; the repository is <code>Unix-SIT</code> because that is the
+  nearest name the platform will hold. It is not an inconsistency nobody noticed.</sub>
 </p>
 
 <p align="center">

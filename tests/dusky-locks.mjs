@@ -1,6 +1,6 @@
 /* Dusky must be installable end to end, in both front ends.
  *
- * Guards the bug this was written for: choosing Dusky in the Unix Install Walkthrough
+ * Guards the bug this was written for: choosing Dusky in the *nix Install Walkthrough
  * dead-ended at "Display server". renderStep() disabled EVERY option card on a
  * locked step —
  *
